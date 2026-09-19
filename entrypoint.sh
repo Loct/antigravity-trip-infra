@@ -68,21 +68,73 @@ if [ -d /workspace ]; then
   fi
 fi
 
-# 5. Permissive Settings (Auto-approve tools like ls, bash, wanderlog)
-echo "[-] Configuring permissive mode in settings.json..."
+# 5. Permissive Settings (Auto-approve all tools and commands)
+echo "[-] Configuring permissive mode across all Antigravity settings..."
+mkdir -p /root/.gemini/config/projects /root/.gemini/antigravity-cli
+
+# A. Global config.json
+cat <<EOF > /root/.gemini/config/config.json
+{
+  "userSettings": {
+    "cliRemoteControlHostname": "wanderlog-agent",
+    "enableTerminalSandbox": false,
+    "allowAgentAccessNonWorkspaceFiles": true,
+    "allowedCommands": [
+      "*"
+    ],
+    "globalPermissionGrants": {
+      "allow": [
+        "*",
+        "command(*)",
+        "command(regex:.*)",
+        "mcp(*)",
+        "read_file(*)",
+        "write_file(*)",
+        "read_url(*)",
+        "execute_url(*)"
+      ]
+    }
+  }
+}
+EOF
+
+# B. Standalone project config (handles outside-of-project workspace)
+cat <<EOF > /root/.gemini/config/projects/outside-of-project.json
+{
+  "id": "outside-of-project",
+  "name": "Outside of Project",
+  "permissionPreset": "Turbo",
+  "toolPermission": "always-proceed",
+  "enableTerminalSandbox": false
+}
+EOF
+
+# C. CLI settings.json
 cat <<EOF > /root/.gemini/antigravity-cli/settings.json
 {
   "trustedWorkspaces": [
     "/workspace"
   ],
   "toolPermission": "always-proceed",
+  "enableTerminalSandbox": false,
+  "permissionPreset": "Turbo",
   "permissions": {
     "allow": [
-      "*"
-    ]
+      "*",
+      "command(*)",
+      "command(regex:.*)",
+      "mcp(*)",
+      "read_file(*)",
+      "write_file(*)",
+      "read_url(*)",
+      "execute_url(*)"
+    ],
+    "ask": [],
+    "deny": []
   }
 }
 EOF
+cp /root/.gemini/antigravity-cli/settings.json /root/.gemini/config/settings.json 2>/dev/null || true
 
 # Ensure interactive shells also default to permissive mode
 echo "alias agy='agy --dangerously-skip-permissions'" > /etc/profile.d/permissive.sh
