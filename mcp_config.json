@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "wanderlog": {
+      "command": "wanderlog",
+      "args": [
+        "mcp",
+        "--enable-write"
+      ],
+      "env": {
+        "WANDERLOG_AUTH_SESSION_COOKIE": "${WANDERLOG_AUTH_SESSION_COOKIE}"
+      }
+    }
+  }
+}

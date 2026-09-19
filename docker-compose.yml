@@ -1,0 +1,24 @@
+services:
+  antigravity-wanderlog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: antigravity-wanderlog
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    environment:
+      - WANDERLOG_AUTH_SESSION_COOKIE=${WANDERLOG_AUTH_SESSION_COOKIE:-}
+      - WANDERLOG_AUTH_SESSION_XSRF_TOKEN=${WANDERLOG_AUTH_SESSION_XSRF_TOKEN:-}
+      - WANDERLOG_DISABLE_KEYCHAIN=1
+      - ENABLE_REMOTE_CONTROL=${ENABLE_REMOTE_CONTROL:-true}
+    volumes:
+      - ./:/workspace
+      - gemini_data:/root/.gemini
+      - wanderlog_data:/root/.config/wanderlog
+
+volumes:
+  gemini_data:
+    driver: local
+  wanderlog_data:
+    driver: local
