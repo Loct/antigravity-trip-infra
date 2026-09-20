@@ -9,6 +9,12 @@
       "env": {
         "WANDERLOG_AUTH_SESSION_COOKIE": "${WANDERLOG_AUTH_SESSION_COOKIE}"
       }
+    },
+    "apify": {
+      "serverUrl": "https://mcp.apify.com",
+      "headers": {
+        "Authorization": "Bearer ${APIFY_TOKEN}"
+      }
     }
   }
 }

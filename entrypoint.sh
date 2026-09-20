@@ -116,7 +116,20 @@ EOF
   chmod 600 /root/.config/booking/api_config.json
 fi
 
-# 4. Verify Installed CLIs
+# 4. Setup Apify Credentials
+mkdir -p /root/.config/apify
+if [ -n "${APIFY_TOKEN:-}" ]; then
+  echo "[-] Initializing Apify credentials from environment..."
+  cat <<EOF > /root/.config/apify/credentials.json
+{
+  "token": "${APIFY_TOKEN}",
+  "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+  chmod 600 /root/.config/apify/credentials.json
+fi
+
+# 5. Verify Installed CLIs
 if command -v wanderlog >/dev/null 2>&1; then
   echo "[-] Wanderlog CLI available: $(wanderlog --version 2>/dev/null || echo 'Denys Vitali wanderlog-cli')"
 fi
@@ -141,6 +154,8 @@ mkdir -p /root/.gemini/antigravity-cli
 if [ -d /workspace ]; then
   cd /workspace
   if [ -f /workspace/mcp_config.json ]; then
+    mkdir -p /root/.gemini/config /root/.gemini/antigravity-cli
+    cp /workspace/mcp_config.json /root/.gemini/config/mcp_config.json 2>/dev/null || true
     cp /workspace/mcp_config.json /root/.gemini/antigravity-cli/mcp_config.json 2>/dev/null || true
   fi
 fi
