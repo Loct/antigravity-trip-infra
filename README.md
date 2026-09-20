@@ -178,6 +178,39 @@ Each instance will maintain its own isolated Wanderlog session, Google authentic
 
 ---
 
+## Autonomous Self-Updating (Without Server SSH Access)
+
+Because the container has Git access and the Docker daemon socket mounted, users connected exclusively through **Antigravity Remote** (`https://antigravity.google.com`) can instruct the agent to update and redeploy itself without needing SSH or server terminal access.
+
+### How It Works:
+1. **Workspace / Skills / Rules Updates**:
+   Prompting Antigravity with *"Update yourself from GitHub"* causes it to run `git pull origin main`. Because `/workspace` is bind-mounted, changes to skills, rules, and scripts apply **immediately in real time**.
+2. **Docker Environment Updates (`Dockerfile`, `compose`, new packages)**:
+   When infrastructure files change, Antigravity executes `./scripts/self_update.sh`.
+   The script spawns a lightweight, detached background updater container (`docker:cli`) on the host Docker daemon.
+   - The background container pulls, rebuilds, and restarts the environment.
+   - The old container cleanly stops, and the new container starts with updated dependencies.
+   - Antigravity Remote Control automatically reconnects in **15–30 seconds**.
+
+### Commands to Give Antigravity in Chat:
+- *"Check if there are any updates on GitHub."*
+- *"Update yourself from GitHub and redeploy if needed."*
+- *"Force a rebuild and redeploy of the Docker container."*
+
+You can also run the script manually from inside the container:
+```bash
+# Check for updates without applying
+./scripts/self_update.sh --check
+
+# Pull updates and rebuild if Dockerfiles changed
+./scripts/self_update.sh
+
+# Force a full rebuild and redeploy
+./scripts/self_update.sh --rebuild
+```
+
+---
+
 ## Testing & CLI Diagnostics
 
 A built-in diagnostic script is provided to verify Wanderlog connectivity and list your trips:

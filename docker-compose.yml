@@ -19,8 +19,10 @@ services:
       - GIT_USER_EMAIL=${GIT_USER_EMAIL:-}
       - BOOKING_SESSION_COOKIE=${BOOKING_SESSION_COOKIE:-}
       - BOOKING_API_KEY=${BOOKING_API_KEY:-}
+      - HOST_PROJECT_DIR=${HOST_PROJECT_DIR:-}
     volumes:
       - ./:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
       - gemini_data:/root/.gemini
       - wanderlog_data:/root/.config/wanderlog
       - github_data:/root/.config/gh
