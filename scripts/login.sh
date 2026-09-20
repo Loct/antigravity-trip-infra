@@ -8,9 +8,11 @@ echo "    Setup & Login: Remote Antigravity & Wanderlog         "
 echo "=========================================================="
 
 echo ""
-echo "This wizard helps you log in to both services:"
+echo "This wizard helps you log in to your services:"
 echo "  Step 1: Authenticate with Wanderlog (via cookie or email/pass)"
 echo "  Step 2: Authenticate with Google Antigravity (via browser OAuth)"
+echo "  Step 3: (Optional) Authenticate with GitHub CLI & Git"
+echo "  Step 4: (Optional) Authenticate with Booking.com"
 echo ""
 read -r -p "Press [Enter] to proceed..." || true
 
@@ -21,6 +23,24 @@ echo "=== Step 1: Wanderlog Authentication ==="
 echo ""
 echo "=== Step 2: Antigravity CLI Authentication ==="
 "$SCRIPT_DIR/login_antigravity.sh"
+
+echo ""
+echo "=== Step 3: GitHub & Git Authentication (Optional) ==="
+read -r -p "Do you want to authenticate with GitHub CLI & Git now? [y/N]: " SETUP_GH || true
+if [[ "$SETUP_GH" =~ ^[Yy]$ ]]; then
+  "$SCRIPT_DIR/login_github.sh"
+else
+  echo "[-] Skipping GitHub setup. You can run './scripts/login_github.sh' anytime."
+fi
+
+echo ""
+echo "=== Step 4: Booking.com Authentication (Optional) ==="
+read -r -p "Do you want to configure Booking.com credentials now? [y/N]: " SETUP_BOOKING || true
+if [[ "$SETUP_BOOKING" =~ ^[Yy]$ ]]; then
+  "$SCRIPT_DIR/login_booking.sh"
+else
+  echo "[-] Skipping Booking.com setup. You can run './scripts/login_booking.sh' anytime."
+fi
 
 echo ""
 echo "=========================================================="

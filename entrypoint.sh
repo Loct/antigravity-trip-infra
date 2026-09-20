@@ -49,14 +49,83 @@ else
   fi
 fi
 
-# 2. Verify Wanderlog CLI
+# 2. Setup Git & GitHub Credentials
+mkdir -p /root/.config/gh /root/.config/git /root/.ssh
+chmod 700 /root/.ssh 2>/dev/null || true
+
+# Symlink ~/.gitconfig to persistent volume directory
+if [ ! -L /root/.gitconfig ]; then
+  touch /root/.config/git/config
+  ln -sf /root/.config/git/config /root/.gitconfig
+fi
+
+# Configure safe directories to prevent dubious ownership issues with mounted repo
+git config --global --add safe.directory /workspace 2>/dev/null || true
+git config --global --add safe.directory '*' 2>/dev/null || true
+
+# Optional Git Identity
+if [ -n "${GIT_USER_NAME:-}" ]; then
+  git config --global user.name "${GIT_USER_NAME}"
+fi
+if [ -n "${GIT_USER_EMAIL:-}" ]; then
+  git config --global user.email "${GIT_USER_EMAIL}"
+fi
+
+# Optional GitHub Token
+GH_AUTH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+if [ -n "$GH_AUTH_TOKEN" ]; then
+  echo "[-] Initializing GitHub credentials from environment..."
+  echo "$GH_AUTH_TOKEN" | gh auth login --with-token 2>/dev/null || true
+  gh auth setup-git 2>/dev/null || true
+  export GH_TOKEN="$GH_AUTH_TOKEN"
+  export GITHUB_TOKEN="$GH_AUTH_TOKEN"
+  echo "export GH_TOKEN=\"$GH_AUTH_TOKEN\"" > /etc/profile.d/github.sh
+  echo "export GITHUB_TOKEN=\"$GH_AUTH_TOKEN\"" >> /etc/profile.d/github.sh
+  chmod +x /etc/profile.d/github.sh
+fi
+
+# 3. Setup Booking.com Credentials
+mkdir -p /root/.config/booking
+if [ -n "${BOOKING_SESSION_COOKIE:-}" ]; then
+  echo "[-] Initializing Booking.com session credentials from environment..."
+  cat <<EOF > /root/.config/booking/credentials.json
+{
+  "session_cookie": "${BOOKING_SESSION_COOKIE}",
+  "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+  chmod 600 /root/.config/booking/credentials.json
+fi
+
+if [ -n "${BOOKING_API_KEY:-}" ]; then
+  echo "[-] Initializing Booking.com API credentials from environment..."
+  cat <<EOF > /root/.config/booking/api_config.json
+{
+  "api_key": "${BOOKING_API_KEY}",
+  "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+  chmod 600 /root/.config/booking/api_config.json
+fi
+
+# 4. Verify Installed CLIs
 if command -v wanderlog >/dev/null 2>&1; then
   echo "[-] Wanderlog CLI available: $(wanderlog --version 2>/dev/null || echo 'Denys Vitali wanderlog-cli')"
 fi
 
-# 3. Verify Antigravity CLI
 if command -v agy >/dev/null 2>&1; then
   echo "[-] Antigravity CLI available: $(agy --version 2>/dev/null || echo 'agy installed')"
+fi
+
+if command -v git >/dev/null 2>&1; then
+  echo "[-] Git available: $(git --version 2>/dev/null || echo 'git installed')"
+fi
+
+if command -v gh >/dev/null 2>&1; then
+  echo "[-] GitHub CLI available: $(gh --version 2>/dev/null | head -n 1 || echo 'gh installed')"
+  if gh auth status >/dev/null 2>&1; then
+    echo "[-] GitHub CLI authenticated as: $(gh api user --jq .login 2>/dev/null || echo 'authenticated user')"
+  fi
 fi
 
 # 4. Copy or link workspace MCP & skills if mounted
@@ -172,6 +241,8 @@ if [ "$1" = "daemon" ] || [ -z "$1" ]; then
   echo "      - Interactive CLI:  docker compose exec antigravity-wanderlog agy"
   echo "      - Wanderlog status: docker compose exec antigravity-wanderlog wanderlog status"
   echo "      - Wanderlog trips:  docker compose exec antigravity-wanderlog wanderlog trips list"
+  echo "      - GitHub CLI:       docker compose exec antigravity-wanderlog gh auth status"
+  echo "      - Git status:       docker compose exec antigravity-wanderlog git status"
   echo "      - Remote status:    docker compose exec antigravity-wanderlog agy remote-control status"
   echo "=========================================================="
   # Keep container running and periodically display heartbeat

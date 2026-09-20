@@ -43,8 +43,9 @@ Allows you to manage, create, and organize [Wanderlog](https://wanderlog.com) tr
 - 📍 **Place & Itinerary Building**: Add attractions, restaurants, and sights with coordinates, addresses, and scheduled visit times.
 - ✈️ **Travel Reservations**: Add and manage flights, hotels, and train journeys.
 - 🤖 **Native Antigravity MCP Server**: The `wanderlog` CLI acts as an MCP server (`wanderlog mcp --enable-write`), giving Antigravity first-class tools for trip operations.
+- 🐙 **Git & GitHub CLI Integration**: Full `git` and `gh` CLI capabilities preinstalled with persistent credentials (`github_data`, `git_data`, `ssh_data`) and Git credential helper setup.
 - 🔗 **Remote Control**: Connects seamlessly with the Antigravity Desktop app or web portal without needing manual SSH or open inbound ports.
-- 💾 **State Persistence**: Docker volumes persist Antigravity session history (`gemini_data`) and Wanderlog credentials (`wanderlog_data`).
+- 💾 **State Persistence**: Docker volumes persist Antigravity session history (`gemini_data`), Wanderlog credentials (`wanderlog_data`), and GitHub/Git configuration (`github_data`, `git_data`, `ssh_data`).
 
 ---
 
@@ -56,10 +57,10 @@ Allows you to manage, create, and organize [Wanderlog](https://wanderlog.com) tr
 
 ### 2. Login & Authentication (Automated Scripts)
 
-We provide interactive scripts to log in to both Wanderlog and Antigravity:
+We provide interactive scripts to log in to Wanderlog, Antigravity, and GitHub:
 
 #### All-in-One Setup Wizard
-Run the unified login wizard to authenticate both services in sequence:
+Run the unified login wizard to authenticate all services in sequence:
 ```bash
 ./scripts/login.sh
 ```
@@ -78,6 +79,24 @@ Run the unified login wizard to authenticate both services in sequence:
   ./scripts/login_antigravity.sh
   ```
   Launches `agy` in interactive mode. If you are not yet authenticated, it displays a Google OAuth URL. Open the link in your browser to sign in with your Google account. Your session is saved permanently to the `gemini_data` volume.
+
+- **GitHub CLI & Git Login**:
+  ```bash
+  ./scripts/login_github.sh
+  ```
+  Provides easy options to:
+  1. Authenticate via web browser / device code (`gh auth login`).
+  2. Paste a GitHub Personal Access Token (PAT).
+  3. Configure Git author identity (`user.name` & `user.email`).
+  4. Check current authentication and git config status.
+
+- **Booking.com Setup**:
+  ```bash
+  ./scripts/login_booking.sh
+  ```
+  Provides options to configure:
+  1. Browser session cookie (`bkng_sso_session` / `bkng`) for account reservations.
+  2. API Key for programmatic hotel search and rates.
 
 ---
 
@@ -221,5 +240,8 @@ The workspace includes:
 | Add Flight | `docker compose exec antigravity-wanderlog wanderlog trips flight add <id> --flight-number AA100 --departure-date 2026-06-01 --departure-time 08:00` |
 | Add Lodging | `docker compose exec antigravity-wanderlog wanderlog trips lodging add <id> --name "Hotel" --check-in 2026-06-01 --check-out 2026-06-05` |
 | Set Budget | `docker compose exec antigravity-wanderlog wanderlog trips budget set <id> --amount 2000 --currency USD` |
+| GitHub Status | `docker compose exec antigravity-wanderlog gh auth status` |
+| Git Status | `docker compose exec antigravity-wanderlog git status` |
+| GitHub CLI Login | `./scripts/login_github.sh` |
 | Start Interactive TUI | `docker compose exec antigravity-wanderlog agy` |
 | Stop Container | `docker compose down` |

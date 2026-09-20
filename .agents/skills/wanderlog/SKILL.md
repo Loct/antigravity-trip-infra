@@ -73,11 +73,10 @@ wanderlog trips places <trip-id> --output json
 # Create a new trip
 wanderlog trips create --title "Trip to Tokyo" --geo-id 1 --start 2026-10-10 --end 2026-10-18
 
-# Copy an existing trip
+# Copy an existing trip (requires user verification)
 wanderlog trips copy <trip-id>
 
-# Delete a trip (requires confirmation unless --yes is passed)
-wanderlog trips delete <trip-id> --yes
+# NOTE: Trip deletion is STRICTLY PROHIBITED by rule. Antigravity may never delete trips.
 ```
 
 ### Adding Places to Itinerary
@@ -138,14 +137,19 @@ wanderlog trips expenses <trip-id> > expenses.csv
 
 ---
 
-## 4. Trip Planning Workflow Best Practices
+## 4. Trip Planning Workflow & Safety Rules
+
+> [!CAUTION]
+> **Antigravity may NEVER delete trips.** Do not execute any deletion command.
+
+> [!IMPORTANT]
+> **All mutations MUST be checked and verified by the user before execution.**
 
 When a user asks to plan or update a trip:
-1. **Discover & Inspect**: Run `wanderlog trips list` to check if a relevant trip already exists. If yes, retrieve details via `wanderlog trips show <trip-id> --details --output json`.
-2. **Trip Creation**: If creating a new trip, confirm title, date range, and primary city/country.
-3. **Structured Addition**:
-   - Add flights and transport first.
-   - Add accommodation for each leg of the trip.
+1. **Discover & Inspect (Autonomous)**: Run `wanderlog trips list` to check if a relevant trip already exists. Retrieve details via `wanderlog trips show <trip-id> --details --output json`. Read-only commands run autonomously.
+2. **Propose Plan & Get User Verification**: Before creating or modifying any trip data, present the exact plan (title, dates, places, times, flight/lodging info) to the user and request explicit confirmation.
+3. **Execute Mutation Only After Approval**:
+   - Create trip or add blocks once the user approves.
    - Group places geographically by day to minimize transit time.
    - Assign reasonable visit times (`--start-time` and `--end-time`).
 4. **Final Verification**: Run `wanderlog trips show <trip-id> --details --output markdown` and present a clean summary to the user.

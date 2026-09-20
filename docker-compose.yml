@@ -13,13 +13,31 @@ services:
       - WANDERLOG_DISABLE_KEYCHAIN=1
       - ENABLE_REMOTE_CONTROL=${ENABLE_REMOTE_CONTROL:-true}
       - REMOTE_CONTROL_HOSTNAME=${REMOTE_CONTROL_HOSTNAME:-}
+      - GH_TOKEN=${GH_TOKEN:-${GITHUB_TOKEN:-}}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-${GH_TOKEN:-}}
+      - GIT_USER_NAME=${GIT_USER_NAME:-}
+      - GIT_USER_EMAIL=${GIT_USER_EMAIL:-}
+      - BOOKING_SESSION_COOKIE=${BOOKING_SESSION_COOKIE:-}
+      - BOOKING_API_KEY=${BOOKING_API_KEY:-}
     volumes:
       - ./:/workspace
       - gemini_data:/root/.gemini
       - wanderlog_data:/root/.config/wanderlog
+      - github_data:/root/.config/gh
+      - git_data:/root/.config/git
+      - ssh_data:/root/.ssh
+      - booking_data:/root/.config/booking
 
 volumes:
   gemini_data:
     driver: local
   wanderlog_data:
+    driver: local
+  github_data:
+    driver: local
+  git_data:
+    driver: local
+  ssh_data:
+    driver: local
+  booking_data:
     driver: local
