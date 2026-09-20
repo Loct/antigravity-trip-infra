@@ -4,3 +4,9 @@ credentials.json
 .DS_Store
 *.tar.gz
 *.code-workspace
+
+# User trip outputs and local data
+trips/
+data/
+.data/
+*.log

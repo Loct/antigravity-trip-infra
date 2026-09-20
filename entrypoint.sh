@@ -63,13 +63,21 @@ fi
 git config --global --add safe.directory /workspace 2>/dev/null || true
 git config --global --add safe.directory '*' 2>/dev/null || true
 
-# Optional Git Identity
-if [ -n "${GIT_USER_NAME:-}" ]; then
-  git config --global user.name "${GIT_USER_NAME}"
+# Ensure Git Identity (with fallback to prevent commit failures)
+GIT_NAME="${GIT_USER_NAME:-$(git config --global user.name 2>/dev/null || true)}"
+GIT_EMAIL="${GIT_USER_EMAIL:-$(git config --global user.email 2>/dev/null || true)}"
+
+if [ -z "$GIT_NAME" ]; then
+  GIT_NAME="Antigravity Agent"
+  git config --global user.name "$GIT_NAME"
 fi
-if [ -n "${GIT_USER_EMAIL:-}" ]; then
-  git config --global user.email "${GIT_USER_EMAIL}"
+if [ -z "$GIT_EMAIL" ]; then
+  GIT_EMAIL="agent@antigravity.local"
+  git config --global user.email "$GIT_EMAIL"
 fi
+
+# Ensure user trip output directory exists
+mkdir -p /workspace/trips 2>/dev/null || true
 
 # Optional GitHub Token
 GH_AUTH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"

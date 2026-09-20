@@ -59,6 +59,12 @@ if [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]; then
     exit 0
   fi
 
+  # Auto-stash dirty state to prevent merge conflicts
+  if ! git diff --quiet || ! git diff --staged --quiet; then
+    echo "[-] Uncommitted changes detected. Auto-stashing before pull..."
+    git stash push -m "auto-stash-self-update-$(date +%s)" 2>/dev/null || true
+  fi
+
   echo "[-] Pulling latest changes..."
   OLD_HEAD="$LOCAL_COMMIT"
   git pull origin "$CURRENT_BRANCH"
@@ -85,7 +91,7 @@ fi
 # 3. Apply Rebuild or Restart
 if [ "$NEEDS_DOCKER_REBUILD" = "true" ]; then
   echo "=========================================================="
-  echo "[-] Rebuilding Docker environment..."
+  echo "[-] Rebuilding Docker environment (Atomic Safety Mode)..."
   echo "=========================================================="
 
   # Check if running inside container or on host
@@ -120,13 +126,15 @@ if [ "$NEEDS_DOCKER_REBUILD" = "true" ]; then
     UPDATER_NAME="antigravity-updater-$(date +%s)"
     echo "[-] Spawning background sibling container ($UPDATER_NAME) to rebuild..."
 
+    # The sibling container builds first BEFORE touching the running container.
+    # If build fails, the running container is never stopped!
     docker run --rm -d \
       --name "$UPDATER_NAME" \
       -v /var/run/docker.sock:/var/run/docker.sock \
       -v "${HOST_DIR}:${HOST_DIR}" \
       -w "${HOST_DIR}" \
       docker:cli \
-      sh -c "echo '[-] Starting build in background...' && docker compose build && docker compose up -d && echo '[-] Redeploy completed successfully!'"
+      sh -c "echo '[-] Step 1: Testing Docker build...' && docker compose build || { echo '[!] Build failed! Aborting to keep current container running.' && exit 1; } && echo '[-] Step 2: Build succeeded. Recreating container...' && docker compose up -d && echo '[-] Redeploy completed successfully!'"
 
     echo ""
     echo "=========================================================="
@@ -134,14 +142,18 @@ if [ "$NEEDS_DOCKER_REBUILD" = "true" ]; then
     echo "=========================================================="
     echo "What will happen next:"
     echo "  1. The background updater container is rebuilding the Docker image."
-    echo "  2. The current container will restart automatically with latest changes."
+    echo "  2. Current container stays running until the new build is confirmed healthy."
     echo "  3. Your Antigravity Remote session will reconnect in ~15-30 seconds."
     echo "=========================================================="
     exit 0
   else
     # Running ON HOST directly
-    echo "[-] Running on host machine. Executing docker compose up -d --build..."
-    docker compose up -d --build
+    echo "[-] Running on host machine. Testing build first..."
+    docker compose build || {
+      echo "[!] Error: Build failed! Current container left untouched."
+      exit 1
+    }
+    docker compose up -d
     echo "=========================================================="
     echo "✅ Rebuild and redeployment successful!"
     echo "=========================================================="
