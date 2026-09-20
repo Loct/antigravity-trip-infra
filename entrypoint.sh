@@ -76,7 +76,7 @@ mkdir -p /root/.gemini/config/projects /root/.gemini/antigravity-cli
 cat <<EOF > /root/.gemini/config/config.json
 {
   "userSettings": {
-    "cliRemoteControlHostname": "wanderlog-agent",
+    "cliRemoteControlHostname": "${REMOTE_CONTROL_HOSTNAME:-wanderlog-agent}",
     "enableTerminalSandbox": false,
     "allowAgentAccessNonWorkspaceFiles": true,
     "allowedCommands": [

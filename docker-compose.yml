@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: antigravity-wanderlog
+    container_name: ${CONTAINER_NAME:-antigravity-wanderlog}
     restart: unless-stopped
     stdin_open: true
     tty: true
@@ -12,6 +12,7 @@ services:
       - WANDERLOG_AUTH_SESSION_XSRF_TOKEN=${WANDERLOG_AUTH_SESSION_XSRF_TOKEN:-}
       - WANDERLOG_DISABLE_KEYCHAIN=1
       - ENABLE_REMOTE_CONTROL=${ENABLE_REMOTE_CONTROL:-true}
+      - REMOTE_CONTROL_HOSTNAME=${REMOTE_CONTROL_HOSTNAME:-}
     volumes:
       - ./:/workspace
       - gemini_data:/root/.gemini

@@ -123,6 +123,42 @@ Press `Ctrl+D` twice or type `/exit` to exit the session.
 
 ---
 
+## Deploying Multiple Instances on the Same Server
+
+You can run multiple independent instances on the same server (e.g., for different trips, workspaces, or user accounts) without port conflicts because the container connects outward via Remote Control websockets.
+
+To deploy a second instance:
+1. Extract or clone the deployment into a separate folder (e.g. `/opt/wanderlog-trip2`):
+   ```bash
+   mkdir -p /opt/wanderlog-trip2 && cd /opt/wanderlog-trip2
+   tar -xzf /path/to/gemini-wanderlog-release.tar.gz
+   ```
+2. Copy and configure its `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+3. Customize the instance variables in `.env`:
+   ```env
+   # Unique Compose project name (isolates volumes and network)
+   COMPOSE_PROJECT_NAME=wanderlog-trip2
+
+   # Unique container name (Docker requires globally unique container names)
+   CONTAINER_NAME=antigravity-wanderlog-trip2
+
+   # Hostname shown in https://antigravity.google.com/
+   REMOTE_CONTROL_HOSTNAME=wanderlog-trip2
+
+   # Wanderlog session cookie for this instance
+   WANDERLOG_AUTH_SESSION_COOKIE="your-second-session-cookie"
+   ```
+4. Start the instance:
+   ```bash
+   ./deploy.sh
+   ```
+Each instance will maintain its own isolated Wanderlog session, Google authentication state, and workspace files.
+
+---
+
 ## Testing & CLI Diagnostics
 
 A built-in diagnostic script is provided to verify Wanderlog connectivity and list your trips:
