@@ -1,17 +1,17 @@
 ---
 name: wanderlog
-description: Manage Wanderlog trips, build day-by-day travel itineraries, add places, flights, hotels, transit, and budgets using the Wanderlog CLI and MCP tools.
+description: Manage Wanderlog trips, build day-by-day itineraries, add places, flights, hotels, transit, budgets, manage travel journals (create/edit stops, captions), and upload & attach photos using the Wanderlog CLI, API, and scripts.
 ---
 
 # Wanderlog Trip Management Skill
 
-This skill equips Antigravity with complete knowledge and actionable workflows to create, inspect, and update trips on [Wanderlog](https://wanderlog.com) using the `wanderlog` CLI and native Model Context Protocol (MCP) server.
+This skill equips Antigravity with complete knowledge and actionable workflows to create, inspect, and update trips on [Wanderlog](https://wanderlog.com) using the `wanderlog` CLI, REST API, JSON0 OT mutations, and the `journal_helper.sh` script.
 
 ---
 
 ## 1. Authentication & Health Check
 
-The CLI authenticates via the `WANDERLOG_AUTH_SESSION_COOKIE` environment variable or stored session tokens in `~/.config/wanderlog/credentials.json`.
+The CLI and API authenticate via the `WANDERLOG_AUTH_SESSION_COOKIE` environment variable or stored session tokens in `~/.config/wanderlog/credentials.json`.
 
 Check authentication status at any time:
 ```bash
@@ -24,6 +24,10 @@ export WANDERLOG_AUTH_SESSION_COOKIE="<session-cookie>"
 # or run interactive login
 wanderlog login
 ```
+
+> [!NOTE]
+> The session cookie stored in Wanderlog credentials represents an Express session ID (`connect.sid`). When making direct HTTP/curl calls to Wanderlog API endpoints (like media upload), use the header:
+> `-H "Cookie: connect.sid=$WANDERLOG_AUTH_SESSION_COOKIE"`
 
 ---
 
@@ -66,6 +70,9 @@ wanderlog trips show <trip-id> --output json
 
 # List places with addresses, ratings, and coordinates
 wanderlog trips places <trip-id> --output json
+
+# View journal stops
+wanderlog trips journal <journal-key> --output json
 ```
 
 ### Creating & Managing Trips
@@ -137,7 +144,99 @@ wanderlog trips expenses <trip-id> > expenses.csv
 
 ---
 
-## 4. Trip Planning Workflow & Safety Rules
+## 4. Travel Journal & Photo Attachments
+
+Wanderlog trips feature an integrated Travel Journal (`itinerary.journal.stops`), supporting rich journal entries with places, dates/times, formatted captions, and attached photos.
+
+Use the provided helper script: `/workspace/.agents/skills/wanderlog/scripts/journal_helper.sh`
+
+### Inspecting Journal Entries
+```bash
+/workspace/.agents/skills/wanderlog/scripts/journal_helper.sh list <trip-key>
+```
+
+### Creating a Journal Entry
+```bash
+/workspace/.agents/skills/wanderlog/scripts/journal_helper.sh add-stop <trip-key> \
+  --title "The Bar by Bavaria" \
+  --date-time "2026-09-26T17:00:00+02:00" \
+  --place-name "The Bar by Bavaria" \
+  --place-id "ChIJoWKn6aDbxkcRFxzhJrTMrJQ" \
+  --lat 51.4585 --lng 5.391694 \
+  --caption "Pre-flight beers at table 512 before flight FR 8439 to Rome" \
+  --index 0
+```
+
+### Editing an Existing Journal Entry
+You can reference the stop by its numeric ID (e.g. `512839201`) or list index (e.g. `0`):
+```bash
+/workspace/.agents/skills/wanderlog/scripts/journal_helper.sh edit-stop <trip-key> <stop-id-or-index> \
+  --title "Updated Title" \
+  --date-time "2026-09-26T18:00:00+02:00" \
+  --caption "Updated caption"
+```
+
+### Uploading & Attaching Photos
+Uploads any local image (`.jpg`, `.png`), retrieves the 32-character CDN image key, and attaches the media object to the target journal stop:
+```bash
+/workspace/.agents/skills/wanderlog/scripts/journal_helper.sh attach-photo <trip-key> <stop-id-or-index> /path/to/photo.jpg
+```
+
+### Under the Hood Architecture
+For direct API scripting without the helper script:
+
+1. **Photo Upload API**:
+   - `POST https://wanderlog.com/api/tripPlans/<trip-key>/media`
+   - Headers: `-H "Cookie: connect.sid=$SESSION_COOKIE"`
+   - Multipart Form Data:
+     - `data`: `'{"deviceId":"uuid","mediaMetadata":[{"localURL":"blob:url","mimeType":"image/jpeg","type":"image"}]}'`
+     - `media0`: binary file upload (`@photo.jpg`)
+   - Returns: `{"success":true,"data":[{"type":"image","key":"<32-character-key>"}]}`
+
+2. **JSON0 OT Mutations (`applyOps`)**:
+   - `POST https://wanderlog.com/api/tripPlans/<trip-key>/applyOps?clientSchemaVersion=2`
+   - Headers: `-H "Cookie: connect.sid=$SESSION_COOKIE" -H "Content-Type: application/json"`
+   - Insert Stop:
+     ```json
+     {
+       "ops": [
+         {
+           "p": ["itinerary", "journal", "stops", 0],
+           "li": {
+             "id": 512839201,
+             "type": "confirmed",
+             "title": "...",
+             "dateTime": "...",
+             "place": { "name": "...", "place_id": "...", "geometry": { "location": { "lat": 0, "lng": 0 } } },
+             "text": { "ops": [{ "insert": "Caption\n" }] },
+             "media": []
+           }
+         }
+       ]
+     }
+     ```
+   - Attach Media:
+     ```json
+     {
+       "ops": [
+         {
+           "p": ["itinerary", "journal", "stops", 0, "media", 0],
+           "li": {
+             "key": "<32-character-key>",
+             "width": 576,
+             "height": 1024,
+             "mediaType": "image",
+             "type": "uploaded"
+           }
+         }
+       ]
+     }
+     ```
+   - CDN Image Host: `https://itin-dev.wanderlogstatic.com/freeImage/<key>`
+
+---
+
+## 5. Trip Planning Workflow & Safety Rules
 
 > [!CAUTION]
 > **Antigravity may NEVER delete trips.** Do not execute any deletion command.
@@ -149,7 +248,8 @@ When a user asks to plan or update a trip:
 1. **Discover & Inspect (Autonomous)**: Run `wanderlog trips list` to check if a relevant trip already exists. Retrieve details via `wanderlog trips show <trip-id> --details --output json`. Read-only commands run autonomously.
 2. **Propose Plan & Get User Verification**: Before creating or modifying any trip data, present the exact plan (title, dates, places, times, flight/lodging info) to the user and request explicit confirmation.
 3. **Execute Mutation Only After Approval**:
-   - Create trip or add blocks once the user approves.
+   - Create trip, journal stop, or add blocks once the user approves.
    - Group places geographically by day to minimize transit time.
    - Assign reasonable visit times (`--start-time` and `--end-time`).
-4. **Final Verification**: Run `wanderlog trips show <trip-id> --details --output markdown` and present a clean summary to the user.
+4. **Final Verification**: Run `wanderlog trips show <trip-id> --details --output markdown` or `journal_helper.sh list <trip-key>` and present a clean summary to the user.
+
