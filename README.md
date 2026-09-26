@@ -44,6 +44,7 @@ Allows you to manage, create, and organize [Wanderlog](https://wanderlog.com) tr
 - ✈️ **Travel Reservations**: Add and manage flights, hotels, and train journeys.
 - 🤖 **Native Antigravity MCP Server**: The `wanderlog` CLI acts as an MCP server (`wanderlog mcp --enable-write`), giving Antigravity first-class tools for trip operations.
 - 🐙 **Git & GitHub CLI Integration**: Full `git` and `gh` CLI capabilities preinstalled with persistent credentials (`github_data`, `git_data`, `ssh_data`) and Git credential helper setup.
+- 🐍 **Python & uv Environment**: Modern, high-performance Python runtime managed by `uv` with Python 3.12 preinstalled for fast dependency management and script execution.
 - 🔗 **Remote Control**: Connects seamlessly with the Antigravity Desktop app or web portal without needing manual SSH or open inbound ports.
 - 💾 **State Persistence**: Docker volumes persist Antigravity session history (`gemini_data`), Wanderlog credentials (`wanderlog_data`), and GitHub/Git configuration (`github_data`, `git_data`, `ssh_data`).
 

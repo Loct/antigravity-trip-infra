@@ -43,6 +43,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /usr/local/bin && \
     chmod +x /usr/local/bin/agy
 
+# Install uv and uvx
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+# Install Python via uv and create standard python symlinks
+RUN uv python install 3.12 && \
+    ln -sf "$(uv python find 3.12)" /usr/local/bin/python3 && \
+    ln -sf "$(uv python find 3.12)" /usr/local/bin/python && \
+    uv cache clean
+
 # Install the compiled wanderlog CLI from builder stage
 COPY --from=wanderlog-builder /wanderlog /usr/local/bin/wanderlog
 RUN chmod +x /usr/local/bin/wanderlog
