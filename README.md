@@ -236,10 +236,17 @@ You can also run the script manually from inside the container:
 
 ## Testing & CLI Diagnostics
 
-A built-in diagnostic script is provided to verify Wanderlog connectivity and list your trips:
+Built-in diagnostic scripts and test runners are provided to verify service connectivity and test integration functionality:
 
 ```bash
+# Wanderlog diagnostics and trips test
 docker compose exec antigravity-wanderlog scripts/test_wanderlog.sh
+
+# Agoda diagnostics, automated test suite, and sample search
+docker compose exec antigravity-wanderlog scripts/test_agoda.sh
+
+# Run full project pytest suite across all integrations (Booking.com & Agoda)
+uv run pytest
 ```
 
 Or run `wanderlog` commands directly:
