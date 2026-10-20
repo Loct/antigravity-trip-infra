@@ -43,6 +43,7 @@ Allows you to manage, create, and organize [Wanderlog](https://wanderlog.com) tr
 - 📍 **Place & Itinerary Building**: Add attractions, restaurants, and sights with coordinates, addresses, and scheduled visit times.
 - ✈️ **Travel Reservations**: Add and manage flights, hotels, and train journeys.
 - 🏨 **Booking.com Lodging Search & Integration**: Search, filter, and compare hotel and lodging accommodations via Booking.com (RapidAPI, Apify residential proxy scraper, or web fallback) and link selected stays directly to Wanderlog trips using `uv run scripts/booking.py`.
+- 🏮 **Agoda Lodging Search & Integration**: Search, filter, and compare hotel room rates and properties via Agoda (RapidAPI, Apify scraper actor, or direct web search) and link selected stays directly to Wanderlog trips using `uv run scripts/agoda.py`.
 - 🤖 **Native Antigravity MCP Server**: The `wanderlog` CLI acts as an MCP server (`wanderlog mcp --enable-write`), giving Antigravity first-class tools for trip operations.
 - 🐙 **Git & GitHub CLI Integration**: Full `git` and `gh` CLI capabilities preinstalled with persistent credentials (`github_data`, `git_data`, `ssh_data`) and Git credential helper setup.
 - 🐍 **Python & uv Environment**: Modern, high-performance Python runtime managed by `uv` with Python 3.12 preinstalled for fast dependency management and script execution.
@@ -100,6 +101,17 @@ Run the unified login wizard to authenticate all services in sequence:
   1. RapidAPI / Booking.com API Key for fast structured hotel search and rates.
   2. Apify Personal API Token for reliable residential-proxy scraper fallback (`voyager/booking-scraper`).
   3. Browser session cookie (`bkng_sso_session` / `bkng`) for account access.
+  4. Integration and credentials status verification.
+  5. Test hotel search.
+
+- **Agoda Setup**:
+  ```bash
+  ./scripts/login_agoda.sh
+  ```
+  Provides options to configure:
+  1. RapidAPI / Agoda API Key for structured hotel search and rates.
+  2. Apify Personal API Token for Agoda scraper actor fallback (`tri_angle/agoda-scraper`).
+  3. Browser session cookie (`AGODA_SESSION_COOKIE`) for web access.
   4. Integration and credentials status verification.
   5. Test hotel search.
 
@@ -266,6 +278,34 @@ uv run scripts/booking.py search -l "Paris" -i 2026-12-01 -o 2026-12-05 --add-to
 
 # Output as JSON for programmatic parsing
 uv run scripts/booking.py search -l "Rome" -f json
+```
+
+> [!IMPORTANT]
+> **Trip Mutation Policy**: Whenever adding lodging to a Wanderlog trip, confirmation is always required before mutating the itinerary. The exact property details, dates, and trip key are displayed for user approval.
+
+---
+
+## Agoda Lodging Search & Wanderlog Integration
+
+The workspace includes a high-performance, uv-powered Agoda integration CLI (`scripts/agoda.py`) and agent skill (`.agents/skills/agoda/SKILL.md`). It supports hybrid querying via RapidAPI (structured REST API), Apify cloud scraper actor (`tri_angle/agoda-scraper`), or direct Agoda web search.
+
+### Commands:
+
+```bash
+# Check status of configured Agoda providers and Wanderlog CLI
+uv run scripts/agoda.py status
+
+# Basic hotel search (defaults to +14 to +18 days)
+uv run scripts/agoda.py search -l "Tokyo"
+
+# Search with custom dates, guests, currency, and rating filter
+uv run scripts/agoda.py search -l "Bangkok" -i 2026-11-01 -o 2026-11-05 -g 2 -c USD --min-rating 8.5 --max-price 250
+
+# Search and interactively select a property to add to a Wanderlog trip
+uv run scripts/agoda.py search -l "Phuket" -i 2026-12-01 -o 2026-12-05 --add-to-trip <trip-key>
+
+# Output as JSON for programmatic parsing
+uv run scripts/agoda.py search -l "Singapore" -f json
 ```
 
 > [!IMPORTANT]

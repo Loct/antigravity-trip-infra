@@ -23,6 +23,10 @@ services:
       - RAPIDAPI_HOST=${RAPIDAPI_HOST:-}
       - APIFY_TOKEN=${APIFY_TOKEN:-}
       - APIFY_BOOKING_ACTOR=${APIFY_BOOKING_ACTOR:-}
+      - AGODA_API_KEY=${AGODA_API_KEY:-}
+      - AGODA_RAPIDAPI_HOST=${AGODA_RAPIDAPI_HOST:-}
+      - APIFY_AGODA_ACTOR=${APIFY_AGODA_ACTOR:-}
+      - AGODA_SESSION_COOKIE=${AGODA_SESSION_COOKIE:-}
       - HOST_PROJECT_DIR=${HOST_PROJECT_DIR:-}
     volumes:
       - ./:/workspace
@@ -33,6 +37,7 @@ services:
       - git_data:/root/.config/git
       - ssh_data:/root/.ssh
       - booking_data:/root/.config/booking
+      - agoda_data:/root/.config/agoda
       - apify_data:/root/.config/apify
 
 volumes:
@@ -47,6 +52,8 @@ volumes:
   ssh_data:
     driver: local
   booking_data:
+    driver: local
+  agoda_data:
     driver: local
   apify_data:
     driver: local

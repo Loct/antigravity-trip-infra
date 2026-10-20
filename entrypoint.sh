@@ -128,13 +128,42 @@ if [ -n "${APIFY_TOKEN:-}" ]; then
 {
   "token": "${APIFY_TOKEN}",
   "actor": "${APIFY_BOOKING_ACTOR:-voyager/booking-scraper}",
+  "agoda_actor": "${APIFY_AGODA_ACTOR:-tri_angle/agoda-scraper}",
   "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
   chmod 600 /root/.config/apify/credentials.json
 fi
 
-# 4. Verify Installed CLIs
+# 4. Setup Agoda Credentials
+mkdir -p /root/.config/agoda
+AGODA_KEY="${AGODA_API_KEY:-${RAPIDAPI_KEY:-${AGODA_COM_ACCESS_TOKEN:-}}}"
+AGODA_COOKIE="${AGODA_SESSION_COOKIE:-${AGODA_COM_COOKIES:-}}"
+
+if [ -n "$AGODA_COOKIE" ]; then
+  echo "[-] Initializing Agoda session credentials from environment..."
+  cat <<EOF > /root/.config/agoda/credentials.json
+{
+  "session_cookie": "${AGODA_COOKIE}",
+  "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+  chmod 600 /root/.config/agoda/credentials.json
+fi
+
+if [ -n "$AGODA_KEY" ]; then
+  echo "[-] Initializing Agoda API credentials from environment..."
+  cat <<EOF > /root/.config/agoda/api_config.json
+{
+  "api_key": "${AGODA_KEY}",
+  "rapidapi_host": "${AGODA_RAPIDAPI_HOST:-agoda-com.p.rapidapi.com}",
+  "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+  chmod 600 /root/.config/agoda/api_config.json
+fi
+
+# 5. Verify Installed CLIs
 if command -v wanderlog >/dev/null 2>&1; then
   echo "[-] Wanderlog CLI available: $(wanderlog --version 2>/dev/null || echo 'Denys Vitali wanderlog-cli')"
 fi
