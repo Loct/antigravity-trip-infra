@@ -116,7 +116,22 @@ EOF
   chmod 600 /root/.config/booking/api_config.json
 fi
 
-# 4. Verify Installed CLIs
+# 4. Setup Apify Credentials (for Agoda & Google Maps lodging search)
+mkdir -p /root/.config/apify
+if [ -n "${APIFY_TOKEN:-}" ]; then
+  echo "[-] Initializing Apify credentials from environment..."
+  cat <<EOF > /root/.config/apify/credentials.json
+{
+  "token": "${APIFY_TOKEN}",
+  "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+  chmod 600 /root/.config/apify/credentials.json
+  echo "export APIFY_TOKEN=\"${APIFY_TOKEN}\"" > /etc/profile.d/apify.sh
+  chmod +x /etc/profile.d/apify.sh
+fi
+
+# 5. Verify Installed CLIs
 if command -v wanderlog >/dev/null 2>&1; then
   echo "[-] Wanderlog CLI available: $(wanderlog --version 2>/dev/null || echo 'Denys Vitali wanderlog-cli')"
 fi
