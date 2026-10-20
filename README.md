@@ -186,7 +186,9 @@ Because the container has Git access and the Docker daemon socket mounted, users
 ### How It Works:
 1. **Workspace / Skills / Rules Updates**:
    Prompting Antigravity with *"Update yourself from GitHub"* causes it to run `git pull origin main`. Because `/workspace` is bind-mounted, changes to skills, rules, and scripts apply **immediately in real time**.
-2. **Docker Environment Updates (`Dockerfile`, `compose`, new packages)**:
+2. **Antigravity CLI Updates (`agy`)**:
+   `self_update.sh` automatically checks and updates the Antigravity CLI (`agy update`). If a new CLI version is downloaded and installed, it automatically restarts the container via a background sibling container so the updated binary is loaded without manual intervention.
+3. **Docker Environment Updates (`Dockerfile`, `compose`, new packages)**:
    When infrastructure files change, Antigravity executes `./scripts/self_update.sh`.
    The script spawns a lightweight, detached background updater container (`docker:cli`) on the host Docker daemon.
    - The background container pulls, rebuilds, and restarts the environment.
@@ -196,6 +198,7 @@ Because the container has Git access and the Docker daemon socket mounted, users
 ### Commands to Give Antigravity in Chat:
 - *"Check if there are any updates on GitHub."*
 - *"Update yourself from GitHub and redeploy if needed."*
+- *"Run self update."*
 - *"Force a rebuild and redeploy of the Docker container."*
 
 You can also run the script manually from inside the container:
@@ -203,10 +206,13 @@ You can also run the script manually from inside the container:
 # Check for updates without applying
 ./scripts/self_update.sh --check
 
-# Pull updates and rebuild if Dockerfiles changed
+# Check/pull Git updates, update agy CLI, and auto-restart if needed
 ./scripts/self_update.sh
 
-# Force a full rebuild and redeploy
+# Force restart to reload binary
+./scripts/self_update.sh --restart
+
+# Force a full Docker rebuild and redeploy
 ./scripts/self_update.sh --rebuild
 ```
 
