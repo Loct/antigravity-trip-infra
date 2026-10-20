@@ -76,15 +76,45 @@ class AgodaConfig:
         session_cookie: Optional[str] = None,
     ):
         self.api_key = api_key or self._resolve_api_key()
-        self.rapidapi_host = rapidapi_host or os.getenv(
-            "AGODA_RAPIDAPI_HOST",
-            os.getenv("RAPIDAPI_HOST", "agoda-com.p.rapidapi.com"),
-        )
+        self.rapidapi_host = rapidapi_host or self._resolve_rapidapi_host()
         self.apify_token = apify_token or self._resolve_apify_token()
         self.apify_actor = apify_actor or os.getenv(
             "APIFY_AGODA_ACTOR", "tri_angle/agoda-scraper"
         )
         self.session_cookie = session_cookie or self._resolve_session_cookie()
+
+    def _resolve_rapidapi_host(self) -> str:
+        for var in ["AGODA_RAPIDAPI_HOST", "RAPIDAPI_HOST"]:
+            val = os.getenv(var)
+            if val and val.strip():
+                return val.strip()
+
+        cfg_path = Path.home() / ".config" / "agoda" / "api_config.json"
+        if cfg_path.is_file():
+            try:
+                data = json.loads(cfg_path.read_text(encoding="utf-8"))
+                val = data.get("rapidapi_host") or data.get("host")
+                if val and str(val).strip():
+                    return str(val).strip()
+            except Exception:
+                pass
+
+        env_path = Path("/workspace/.env")
+        if env_path.is_file():
+            try:
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k in ["AGODA_RAPIDAPI_HOST", "RAPIDAPI_HOST"] and v:
+                        return v
+            except Exception:
+                pass
+
+        return "agoda-com.p.rapidapi.com"
 
     def _resolve_api_key(self) -> Optional[str]:
         # Check env vars
