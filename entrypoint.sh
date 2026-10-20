@@ -94,26 +94,44 @@ fi
 
 # 3. Setup Booking.com Credentials
 mkdir -p /root/.config/booking
-if [ -n "${BOOKING_SESSION_COOKIE:-}" ]; then
+BOOKING_KEY="${BOOKING_API_KEY:-${RAPIDAPI_KEY:-${BOOKING_COM_ACCESS_TOKEN:-}}}"
+BOOKING_COOKIE="${BOOKING_SESSION_COOKIE:-${BOOKING_COM_COOKIES:-}}"
+
+if [ -n "$BOOKING_COOKIE" ]; then
   echo "[-] Initializing Booking.com session credentials from environment..."
   cat <<EOF > /root/.config/booking/credentials.json
 {
-  "session_cookie": "${BOOKING_SESSION_COOKIE}",
+  "session_cookie": "${BOOKING_COOKIE}",
   "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
   chmod 600 /root/.config/booking/credentials.json
 fi
 
-if [ -n "${BOOKING_API_KEY:-}" ]; then
+if [ -n "$BOOKING_KEY" ]; then
   echo "[-] Initializing Booking.com API credentials from environment..."
   cat <<EOF > /root/.config/booking/api_config.json
 {
-  "api_key": "${BOOKING_API_KEY}",
+  "api_key": "${BOOKING_KEY}",
+  "rapidapi_host": "${RAPIDAPI_HOST:-booking-com15.p.rapidapi.com}",
   "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
   chmod 600 /root/.config/booking/api_config.json
+fi
+
+# Setup Apify Credentials (for scraper actors)
+mkdir -p /root/.config/apify
+if [ -n "${APIFY_TOKEN:-}" ]; then
+  echo "[-] Initializing Apify credentials from environment..."
+  cat <<EOF > /root/.config/apify/credentials.json
+{
+  "token": "${APIFY_TOKEN}",
+  "actor": "${APIFY_BOOKING_ACTOR:-voyager/booking-scraper}",
+  "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+  chmod 600 /root/.config/apify/credentials.json
 fi
 
 # 4. Verify Installed CLIs

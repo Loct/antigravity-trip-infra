@@ -10,3 +10,8 @@ trips/
 data/
 .data/
 *.log
+
+# Python cache & tests
+__pycache__/
+*.py[cod]
+.pytest_cache/
