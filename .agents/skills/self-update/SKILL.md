@@ -37,6 +37,12 @@ When a user asks:
 
 Follow this procedure:
 
+### Step 0: Ensure Tracking Branch
+If the working tree is clean and currently on a feature branch (e.g., after pull request merges):
+```bash
+git checkout main
+```
+
 ### Step 1: Check for Updates
 Run:
 ```bash
