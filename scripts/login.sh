@@ -13,6 +13,7 @@ echo "  Step 1: Authenticate with Wanderlog (via cookie or email/pass)"
 echo "  Step 2: Authenticate with Google Antigravity (via browser OAuth)"
 echo "  Step 3: (Optional) Authenticate with GitHub CLI & Git"
 echo "  Step 4: (Optional) Authenticate with Booking.com"
+echo "  Step 5: (Optional) Authenticate with Apify (Agoda & Multi-OTA)"
 echo ""
 read -r -p "Press [Enter] to proceed..." || true
 
@@ -40,6 +41,15 @@ if [[ "$SETUP_BOOKING" =~ ^[Yy]$ ]]; then
   "$SCRIPT_DIR/login_booking.sh"
 else
   echo "[-] Skipping Booking.com setup. You can run './scripts/login_booking.sh' anytime."
+fi
+
+echo ""
+echo "=== Step 5: Apify & Multi-OTA Hotel Comparison (Optional) ==="
+read -r -p "Do you want to configure Apify token for Agoda/hotel comparisons now? [y/N]: " SETUP_APIFY || true
+if [[ "$SETUP_APIFY" =~ ^[Yy]$ ]]; then
+  "$SCRIPT_DIR/login_apify.sh"
+else
+  echo "[-] Skipping Apify setup. You can run './scripts/login_apify.sh' anytime."
 fi
 
 echo ""

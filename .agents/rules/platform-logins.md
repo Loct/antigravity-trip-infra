@@ -10,7 +10,8 @@ Antigravity is explicitly allowed and configured to facilitate user logins and c
 1. **Wanderlog** (`https://wanderlog.com`): Travel itinerary and trip planning.
 2. **GitHub** (`https://github.com`): Code repository management, version control, and GitHub CLI (`gh`).
 3. **Booking.com** (`https://booking.com`): Hotel, lodging, and accommodation search and bookings.
-4. **New / Future Platforms** (e.g. Airbnb, Skyscanner, Google Flights, Expedia): Any new travel or utility platform added to the environment must follow the Standard Platform Onboarding Protocol below.
+4. **Apify** (`https://apify.com`): Cloud scraping and multi-OTA hotel comparison (Agoda, Google Hotels, Booking.com) via Model Context Protocol (MCP).
+5. **New / Future Platforms** (e.g. Airbnb, Skyscanner, Google Flights, Expedia): Any new travel or utility platform added to the environment must follow the Standard Platform Onboarding Protocol below.
 
 ---
 
