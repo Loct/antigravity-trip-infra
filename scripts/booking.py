@@ -76,12 +76,16 @@ class BookingConfig:
         session_cookie: Optional[str] = None,
     ):
         self.api_key = api_key or self._resolve_api_key()
-        self.rapidapi_host = rapidapi_host or os.getenv(
-            "RAPIDAPI_HOST", "booking-com15.p.rapidapi.com"
+        self.rapidapi_host = (
+            rapidapi_host
+            or os.getenv("RAPIDAPI_HOST")
+            or "booking-com15.p.rapidapi.com"
         )
         self.apify_token = apify_token or self._resolve_apify_token()
-        self.apify_actor = apify_actor or os.getenv(
-            "APIFY_BOOKING_ACTOR", "voyager/booking-scraper"
+        self.apify_actor = (
+            apify_actor
+            or os.getenv("APIFY_BOOKING_ACTOR")
+            or "voyager/booking-scraper"
         )
         self.session_cookie = session_cookie or self._resolve_session_cookie()
 
@@ -435,6 +439,8 @@ def search_apify(
                     pass
 
         address = item.get("address") or item.get("location") or location
+        if isinstance(address, dict):
+            address = address.get("full") or address.get("name") or ", ".join(f"{v}" for v in address.values() if isinstance(v, str))
         lat = item.get("lat") or item.get("latitude")
         lng = item.get("lng") or item.get("longitude")
         url_link = item.get("url") or item.get("link")
@@ -719,7 +725,7 @@ def print_pretty_table(
         )
 
         badges_str = ", ".join(h.badges) if h.badges else "[dim]Standard[/dim]"
-        address_str = h.address or "[dim]N/A[/dim]"
+        address_str = (h.address.get("full") if isinstance(h.address, dict) else h.address) or "[dim]N/A[/dim]"
 
         name_text = h.name
         if h.url:
