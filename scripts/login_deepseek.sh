@@ -58,14 +58,17 @@ case "$CHOICE" in
 
     echo ""
     echo "Select default model for OpenRouter:"
-    echo "  1) deepseek/deepseek-r1:free (Reasoning & Chain-of-Thought - Recommended)"
-    echo "  2) deepseek/deepseek-chat:free (Faster response)"
-    read -r -p "Choice [1-2, default: 1]: " MODEL_CHOICE || true
+    echo "  1) deepseek/deepseek-chat (DeepSeek V3 Chat - Recommended, lowest cost)"
+    echo "  2) deepseek/deepseek-v4.1-flash (High speed DeepSeek Flash)"
+    echo "  3) openrouter/free (Universal free reasoning router)"
+    read -r -p "Choice [1-3, default: 1]: " MODEL_CHOICE || true
 
     if [ "$MODEL_CHOICE" = "2" ]; then
-      MODEL_VAL="deepseek/deepseek-chat:free"
+      MODEL_VAL="deepseek/deepseek-v4.1-flash"
+    elif [ "$MODEL_CHOICE" = "3" ]; then
+      MODEL_VAL="openrouter/free"
     else
-      MODEL_VAL="deepseek/deepseek-r1:free"
+      MODEL_VAL="deepseek/deepseek-chat"
     fi
 
     update_env_var "OPENROUTER_API_KEY" "$API_KEY_VAL"

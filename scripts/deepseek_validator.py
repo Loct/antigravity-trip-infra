@@ -94,7 +94,7 @@ class ProviderConfig:
         # Provider defaults
         if self.provider == "openrouter":
             self.base_url = self.base_url or "https://openrouter.ai/api/v1"
-            self.model = self.model or "deepseek/deepseek-r1:free"
+            self.model = self.model or "deepseek/deepseek-chat"
             self.default_headers = {
                 "HTTP-Referer": "https://wanderlog.com",
                 "X-Title": "Antigravity Wanderlog Trip Validator",
@@ -114,7 +114,7 @@ class ProviderConfig:
             self.default_headers = {}
         else:
             self.base_url = self.base_url or "https://openrouter.ai/api/v1"
-            self.model = self.model or "deepseek/deepseek-r1:free"
+            self.model = self.model or "deepseek/deepseek-chat"
             self.default_headers = {}
 
     def get_client(self) -> OpenAI:
