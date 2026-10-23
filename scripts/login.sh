@@ -14,6 +14,7 @@ echo "  Step 2: Authenticate with Google Antigravity (via browser OAuth)"
 echo "  Step 3: (Optional) Authenticate with GitHub CLI & Git"
 echo "  Step 4: (Optional) Authenticate with Booking.com"
 echo "  Step 5: (Optional) Authenticate with Agoda"
+echo "  Step 6: (Optional) Configure DeepSeek / OpenRouter Trip Validator"
 echo ""
 read -r -p "Press [Enter] to proceed..." || true
 
@@ -50,6 +51,15 @@ if [[ "$SETUP_AGODA" =~ ^[Yy]$ ]]; then
   "$SCRIPT_DIR/login_agoda.sh"
 else
   echo "[-] Skipping Agoda setup. You can run './scripts/login_agoda.sh' anytime."
+fi
+
+echo ""
+echo "=== Step 6: DeepSeek & OpenRouter Trip Validator (Optional) ==="
+read -r -p "Do you want to configure free DeepSeek (via OpenRouter) to validate trips? [y/N]: " SETUP_DS || true
+if [[ "$SETUP_DS" =~ ^[Yy]$ ]]; then
+  "$SCRIPT_DIR/login_deepseek.sh"
+else
+  echo "[-] Skipping DeepSeek setup. You can run './scripts/login_deepseek.sh' anytime."
 fi
 
 echo ""
