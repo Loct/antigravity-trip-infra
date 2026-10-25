@@ -136,34 +136,34 @@ def test_search_rapidapi_booking_com18_mocked():
     mock_dest_resp = MagicMock()
     mock_dest_resp.json.return_value = {
         "status": True,
-        "data": [{"dest_id": "-126693", "search_type": "city"}],
+        "data": [{"id": "base64-location-id", "name": "Rome"}],
     }
     mock_dest_resp.raise_for_status = MagicMock()
 
     mock_hotels_resp = MagicMock()
     mock_hotels_resp.json.return_value = {
         "status": True,
-        "data": {
-            "hotels": [
-                {
-                    "hotel_id": 99999,
-                    "hotel_name": "Rome Boutique Stay",
-                    "review_score": 9.1,
-                    "review_nr": 1200,
-                    "review_score_word": "Superb",
-                    "price_breakdown": {
-                        "gross_price": 520.0,
+        "data": [
+            {
+                "id": 99999,
+                "name": "Rome Boutique Stay",
+                "reviewScore": 9.1,
+                "reviewCount": 1200,
+                "reviewScoreWord": "Superb",
+                "priceBreakdown": {
+                    "grossPrice": {
+                        "value": 520.0,
                         "currency": "EUR",
+                        "amountRounded": "€ 520",
                     },
-                    "latitude": 41.9,
-                    "longitude": 12.5,
-                    "photo_url": "https://example.com/rome.jpg",
-                    "url": "https://www.booking.com/hotel/it/rome-boutique.html",
-                    "is_genius_deal": True,
-                    "is_free_cancellation": True,
-                }
-            ]
-        },
+                    "benefitBadges": [{"text": "Genius Deal"}, {"text": "Free cancellation"}],
+                },
+                "latitude": 41.9,
+                "longitude": 12.5,
+                "photoUrls": ["https://example.com/rome.jpg"],
+                "wishlistName": "Rome",
+            }
+        ],
     }
     mock_hotels_resp.raise_for_status = MagicMock()
 

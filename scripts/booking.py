@@ -365,73 +365,65 @@ def search_rapidapi(
             if not dest_items:
                 raise ValueError(f"No destination found for '{location}'.")
 
-            dest_id = dest_items[0].get("dest_id") or dest_items[0].get("id")
-            search_type = dest_items[0].get("search_type") or dest_items[0].get("dest_type", "city")
+            loc_id = dest_items[0].get("id") or dest_items[0].get("dest_id")
 
             # Step 2: Hotel search via /stays/search
             search_url = f"https://{config.rapidapi_host}/stays/search"
             params = {
-                "dest_id": str(dest_id),
-                "search_type": str(search_type),
-                "arrival_date": check_in,
-                "departure_date": check_out,
-                "adults": str(guests),
-                "room_qty": str(rooms),
-                "currency_code": currency,
-                "page_number": "1",
-                "units": "metric",
-                "temperature_unit": "c",
-                "languagecode": "en-us",
+                "locationId": loc_id,
+                "checkinDate": check_in,
+                "checkoutDate": check_out,
+                "adults": guests,
+                "rooms": rooms,
+                "currency": currency,
             }
             r_search = client.get(search_url, params=params, headers=headers)
             r_search.raise_for_status()
-            res_data = r_search.json().get("data", {})
-            raw_hotels = res_data.get("hotels", [])
+            raw_data = r_search.json().get("data", [])
+            raw_hotels = (
+                raw_data
+                if isinstance(raw_data, list)
+                else (raw_data.get("hotels", []) if isinstance(raw_data, dict) else [])
+            )
 
             for item in raw_hotels[:limit]:
-                name = item.get("hotel_name") or item.get("name", "Unknown Hotel")
-                hotel_id = str(item.get("hotel_id", item.get("id", "")))
-                rating = item.get("review_score") or item.get("rating")
-                review_count = item.get("review_nr") or item.get("review_count")
-                review_word = item.get("review_score_word") or item.get("review_word")
+                name = item.get("name") or item.get("hotel_name", "Unknown Hotel")
+                hotel_id = str(item.get("id") or item.get("hotel_id", ""))
+                rating = item.get("reviewScore") or item.get("review_score")
+                review_count = item.get("reviewCount") or item.get("review_nr")
+                review_word = item.get("reviewScoreWord") or item.get("review_score_word")
 
-                price_breakdown = item.get("price_breakdown", {})
-                price_val = price_breakdown.get("gross_price") or price_breakdown.get("all_inclusive_price")
-                if not price_val:
-                    comp = item.get("composite_price_breakdown", {})
-                    items_list = comp.get("items", [])
-                    if items_list:
-                        price_val = items_list[0].get("item_amount", {}).get("value")
-
-                price_curr = item.get("currency_code") or price_breakdown.get("currency", currency)
-                price_str = f"{price_curr} {float(price_val):.2f}" if price_val is not None else None
+                price_info = item.get("priceBreakdown", {}).get("grossPrice", {})
+                price_val = price_info.get("value")
+                price_curr = price_info.get("currency", currency)
+                price_str = price_info.get("amountRounded") or (
+                    f"{price_curr} {float(price_val):.2f}" if price_val is not None else None
+                )
 
                 lat = item.get("latitude")
                 lng = item.get("longitude")
-                photo_url = item.get("photo_url") or (
-                    item.get("photos", [None])[0] if item.get("photos") else None
-                )
-                url = item.get("url") or f"https://www.booking.com/hotel/{hotel_id}.html"
+                photo_urls = item.get("photoUrls", [])
+                photo_url = photo_urls[0] if photo_urls else None
+                url = f"https://www.booking.com/hotel/{hotel_id}.html"
 
                 badges = []
-                if item.get("is_genius_deal"):
-                    badges.append("Genius Deal")
-                if item.get("is_beach_front") or item.get("isBeachFront"):
-                    badges.append("Beachfront")
-                if item.get("is_free_cancellation") or item.get("isFreeCancellation"):
-                    badges.append("Free cancellation")
+                for b in item.get("priceBreakdown", {}).get("benefitBadges", []):
+                    if isinstance(b, dict) and b.get("text"):
+                        badges.append(b["text"])
+                    elif isinstance(b, str):
+                        badges.append(b)
 
                 hotels.append(
                     Hotel(
                         name=name,
                         hotel_id=hotel_id,
-                        rating=float(rating) if rating is not None else None,
-                        review_count=int(review_count) if review_count is not None else None,
-                        review_word=review_word,
+                        rating=float(rating) if rating is not None and rating > 0 else None,
+                        review_count=int(review_count) if review_count is not None and review_count > 0 else None,
+                        review_word=review_word if review_word else None,
                         price_text=price_str,
                         total_price=float(price_val) if price_val is not None else None,
                         currency=price_curr,
-                        address=item.get("address") or item.get("city") or location,
+                        address=item.get("wishlistName") or location,
                         latitude=float(lat) if lat is not None else None,
                         longitude=float(lng) if lng is not None else None,
                         url=url,
