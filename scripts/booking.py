@@ -734,22 +734,23 @@ def search_scrape(
 
 
 def apply_genius_discounts(hotels: List[Hotel], genius_level: int) -> None:
-    """Apply Genius loyalty program discounts to hotel rates."""
+    """Apply Genius loyalty program discounts only to verified Genius properties."""
     if genius_level <= 0:
         return
 
     discount_rate = GENIUS_DISCOUNT_RATES.get(genius_level, 0.20 if genius_level >= 3 else 0.10)
     for h in hotels:
-        if h.total_price:
-            g_price = round(h.total_price * (1.0 - discount_rate), 2)
-            h.genius_price = g_price
-            h.genius_discount_rate = discount_rate
-            h.is_genius_deal = True
-            curr_symbol = "€ " if h.currency == "EUR" else ("$ " if h.currency == "USD" else f"{h.currency} ")
-            h.genius_price_text = f"{curr_symbol}{g_price:.2f}"
-            badge_text = f"Genius L{genius_level} (-{int(discount_rate*100)}%)"
-            if badge_text not in h.badges:
-                h.badges.append(badge_text)
+        # Strictly apply only if the property is verified as a Genius partner
+        if h.is_genius_deal or "Genius Deal" in h.badges:
+            if h.total_price:
+                g_price = round(h.total_price * (1.0 - discount_rate), 2)
+                h.genius_price = g_price
+                h.genius_discount_rate = discount_rate
+                curr_symbol = "€ " if h.currency == "EUR" else ("$ " if h.currency == "USD" else f"{h.currency} ")
+                h.genius_price_text = f"{curr_symbol}{g_price:.2f}"
+                badge_text = f"Genius L{genius_level} (-{int(discount_rate*100)}%)"
+                if badge_text not in h.badges:
+                    h.badges.append(badge_text)
 
 
 def search_hotels(
