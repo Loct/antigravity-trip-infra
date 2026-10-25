@@ -309,25 +309,31 @@ def test_status_check():
 
 def test_genius_discount_application():
     hotels = [
-        Hotel(name="Genius Hotel", hotel_id="101", total_price=500.0, price_text="€ 500.00", currency="EUR")
+        Hotel(name="Genius Hotel", hotel_id="101", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=True),
+        Hotel(name="Regular Hotel", hotel_id="102", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=False),
     ]
-    # Level 3: 20% off
+    # Level 3: 20% off only for verified Genius properties
     apply_genius_discounts(hotels, genius_level=3)
     assert hotels[0].genius_price == 400.0
     assert "€ 400.00" in hotels[0].genius_price_text
     assert hotels[0].genius_discount_rate == 0.20
     assert "Genius L3 (-20%)" in hotels[0].badges
 
+    # Non-genius property must NOT be discounted
+    assert hotels[1].genius_price is None
+    assert hotels[1].genius_price_text is None
+    assert "Genius L3 (-20%)" not in hotels[1].badges
+
     # Level 2: 15% off
     hotels2 = [
-        Hotel(name="Genius Hotel 2", hotel_id="102", total_price=500.0, price_text="€ 500.00", currency="EUR")
+        Hotel(name="Genius Hotel 2", hotel_id="103", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=True)
     ]
     apply_genius_discounts(hotels2, genius_level=2)
     assert hotels2[0].genius_price == 425.0
 
     # Level 1: 10% off
     hotels1 = [
-        Hotel(name="Genius Hotel 1", hotel_id="103", total_price=500.0, price_text="€ 500.00", currency="EUR")
+        Hotel(name="Genius Hotel 1", hotel_id="104", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=True)
     ]
     apply_genius_discounts(hotels1, genius_level=1)
     assert hotels1[0].genius_price == 450.0
