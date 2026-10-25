@@ -41,6 +41,10 @@ console = Console()
 err_console = Console(stderr=True)
 
 
+DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", os.getenv("AGODA_CURRENCY", "EUR"))
+_UNSET = object()
+
+
 @dataclasses.dataclass
 class Hotel:
     name: str
@@ -51,7 +55,7 @@ class Hotel:
     price_text: Optional[str] = None
     price_per_night: Optional[float] = None
     total_price: Optional[float] = None
-    currency: str = "USD"
+    currency: str = DEFAULT_CURRENCY
     address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -69,22 +73,41 @@ class Hotel:
 class AgodaConfig:
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: Any = _UNSET,
         rapidapi_host: Optional[str] = None,
-        apify_token: Optional[str] = None,
+        apify_token: Any = _UNSET,
         apify_actor: Optional[str] = None,
-        session_cookie: Optional[str] = None,
+        session_cookie: Any = _UNSET,
     ):
-        self.api_key = api_key or self._resolve_api_key()
+        if api_key == "":
+            self.api_key = None
+        elif api_key is not None and api_key is not _UNSET:
+            self.api_key = api_key
+        else:
+            self.api_key = self._resolve_api_key()
+
         self.rapidapi_host = rapidapi_host or os.getenv(
             "AGODA_RAPIDAPI_HOST",
             os.getenv("RAPIDAPI_HOST", "agoda-com.p.rapidapi.com"),
         )
-        self.apify_token = apify_token or self._resolve_apify_token()
+
+        if apify_token == "":
+            self.apify_token = None
+        elif apify_token is not None and apify_token is not _UNSET:
+            self.apify_token = apify_token
+        else:
+            self.apify_token = self._resolve_apify_token()
+
         self.apify_actor = apify_actor or os.getenv(
             "APIFY_AGODA_ACTOR", "tri_angle/agoda-scraper"
         )
-        self.session_cookie = session_cookie or self._resolve_session_cookie()
+
+        if session_cookie == "":
+            self.session_cookie = None
+        elif session_cookie is not None and session_cookie is not _UNSET:
+            self.session_cookie = session_cookie
+        else:
+            self.session_cookie = self._resolve_session_cookie()
 
     def _resolve_api_key(self) -> Optional[str]:
         # Check env vars
@@ -671,7 +694,7 @@ def search_hotels(
     check_out: str,
     guests: int = 2,
     rooms: int = 1,
-    currency: str = "USD",
+    currency: str = DEFAULT_CURRENCY,
     limit: int = 10,
     provider: str = "auto",
     config: Optional[AgodaConfig] = None,
@@ -986,7 +1009,12 @@ def main() -> None:
     )
     search_p.add_argument("-g", "--guests", type=int, default=2, help="Number of adults/guests (default: 2)")
     search_p.add_argument("-r", "--rooms", type=int, default=1, help="Number of rooms (default: 1)")
-    search_p.add_argument("-c", "--currency", default="USD", help="Currency code (default: USD)")
+    search_p.add_argument(
+        "-c",
+        "--currency",
+        default=DEFAULT_CURRENCY,
+        help=f"Currency code (default: {DEFAULT_CURRENCY})",
+    )
     search_p.add_argument("--limit", type=int, default=10, help="Max results to display (default: 10)")
     search_p.add_argument(
         "-p",

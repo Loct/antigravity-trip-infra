@@ -63,7 +63,7 @@ uv run scripts/booking.py search \
   -i 2026-11-01 \
   -o 2026-11-05 \
   -g 2 \
-  -c USD \
+  -c EUR \
   --limit 10
 ```
 
