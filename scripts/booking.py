@@ -278,6 +278,11 @@ def search_rapidapi(
         "X-RapidAPI-Key": config.api_key,
         "X-RapidAPI-Host": config.rapidapi_host,
     }
+    if config.session_cookie:
+        cookie_header = config.session_cookie
+        if "bkng_sso" not in cookie_header and "=" not in cookie_header:
+            cookie_header = f"bkng_sso_session={cookie_header}"
+        headers["Cookie"] = cookie_header
 
     with httpx.Client(timeout=30.0) as client:
         # Check host type
