@@ -42,6 +42,12 @@ err_console = Console(stderr=True)
 
 
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", os.getenv("BOOKING_CURRENCY", "EUR"))
+DEFAULT_GENIUS_LEVEL = int(os.getenv("GENIUS_LEVEL", os.getenv("BOOKING_GENIUS_LEVEL", "3")))
+GENIUS_DISCOUNT_RATES = {
+    1: 0.10,  # Level 1: 10%
+    2: 0.15,  # Level 2: 15%
+    3: 0.20,  # Level 3: 20%
+}
 _UNSET = object()
 
 
@@ -56,6 +62,10 @@ class Hotel:
     price_per_night: Optional[float] = None
     total_price: Optional[float] = None
     currency: str = DEFAULT_CURRENCY
+    genius_price: Optional[float] = None
+    genius_price_text: Optional[str] = None
+    is_genius_deal: bool = False
+    genius_discount_rate: float = 0.0
     address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -723,6 +733,25 @@ def search_scrape(
     return hotels
 
 
+def apply_genius_discounts(hotels: List[Hotel], genius_level: int) -> None:
+    """Apply Genius loyalty program discounts to hotel rates."""
+    if genius_level <= 0:
+        return
+
+    discount_rate = GENIUS_DISCOUNT_RATES.get(genius_level, 0.20 if genius_level >= 3 else 0.10)
+    for h in hotels:
+        if h.total_price:
+            g_price = round(h.total_price * (1.0 - discount_rate), 2)
+            h.genius_price = g_price
+            h.genius_discount_rate = discount_rate
+            h.is_genius_deal = True
+            curr_symbol = "€ " if h.currency == "EUR" else ("$ " if h.currency == "USD" else f"{h.currency} ")
+            h.genius_price_text = f"{curr_symbol}{g_price:.2f}"
+            badge_text = f"Genius L{genius_level} (-{int(discount_rate*100)}%)"
+            if badge_text not in h.badges:
+                h.badges.append(badge_text)
+
+
 def search_hotels(
     location: str,
     check_in: str,
@@ -732,6 +761,7 @@ def search_hotels(
     currency: str = DEFAULT_CURRENCY,
     limit: int = 10,
     provider: str = "auto",
+    genius_level: int = DEFAULT_GENIUS_LEVEL,
     config: Optional[BookingConfig] = None,
 ) -> Tuple[List[Hotel], str]:
     """Execute hybrid search using the best available provider."""
@@ -753,6 +783,7 @@ def search_hotels(
                     config=cfg,
                 )
                 if results:
+                    apply_genius_discounts(results, genius_level)
                     return results, f"RapidAPI ({cfg.rapidapi_host})"
             except Exception as e:
                 errors.append(f"RapidAPI failed: {e}")
@@ -773,6 +804,7 @@ def search_hotels(
                     config=cfg,
                 )
                 if results:
+                    apply_genius_discounts(results, genius_level)
                     return results, f"Apify ({cfg.apify_actor})"
             except Exception as e:
                 errors.append(f"Apify failed: {e}")
@@ -792,6 +824,7 @@ def search_hotels(
                 config=cfg,
             )
             if results:
+                apply_genius_discounts(results, genius_level)
                 return results, "Direct Web Scrape"
         except Exception as e:
             errors.append(f"Direct scrape failed: {e}")
@@ -817,9 +850,15 @@ def print_pretty_table(
     check_out: str,
     guests: int,
     provider_name: str,
+    genius_level: int = DEFAULT_GENIUS_LEVEL,
 ) -> None:
+    genius_tag = ""
+    if genius_level > 0:
+        disc_pct = int(GENIUS_DISCOUNT_RATES.get(genius_level, 0.20) * 100)
+        genius_tag = f"\n[bold cyan]✨ Genius Level {genius_level} Active (-{disc_pct}% loyalty discount applied)[/bold cyan]"
+
     table = Table(
-        title=f"🏨 Booking.com Hotels in {location} ({check_in} → {check_out}, {guests} guests)\n[dim]Source: {provider_name}[/dim]",
+        title=f"🏨 Booking.com Hotels in {location} ({check_in} → {check_out}, {guests} guests){genius_tag}\n[dim]Source: {provider_name}[/dim]",
         header_style="bold magenta",
         show_lines=True,
     )
@@ -827,7 +866,7 @@ def print_pretty_table(
     table.add_column("#", justify="center", style="dim", width=4)
     table.add_column("Hotel Name", style="bold white", min_width=25)
     table.add_column("Rating", justify="center", width=12)
-    table.add_column("Price", justify="right", width=15)
+    table.add_column("Price", justify="right", width=16)
     table.add_column("Location / Address", style="dim", min_width=25)
     table.add_column("Amenities / Badges", style="cyan", min_width=18)
 
@@ -850,10 +889,18 @@ def print_pretty_table(
         else:
             rating_str = "[dim]N/A[/dim]"
 
-        # Price formatting
-        price_str = h.price_text or (
-            f"{h.currency} {h.total_price:.2f}" if h.total_price else "[dim]Check site[/dim]"
-        )
+        # Price formatting with Genius tier
+        if h.genius_price_text and h.genius_price is not None:
+            price_str = (
+                f"[dim strikethrough]{h.price_text}[/dim strikethrough]\n"
+                f"[bold green]{h.genius_price_text}[/bold green]\n"
+                f"[dim cyan](Genius L{genius_level})[/dim cyan]"
+            )
+        else:
+            price_str = h.price_text or (
+                f"{h.currency} {h.total_price:.2f}" if h.total_price else "[dim]Check site[/dim]"
+            )
+            price_str = f"[bold yellow]{price_str}[/bold yellow]"
 
         badges_str = ", ".join(h.badges) if h.badges else "[dim]Standard[/dim]"
         address_str = (h.address.get("full") if isinstance(h.address, dict) else h.address) or "[dim]N/A[/dim]"
@@ -866,7 +913,7 @@ def print_pretty_table(
             str(idx),
             name_text,
             rating_str,
-            f"[bold yellow]{price_str}[/bold yellow]",
+            price_str,
             address_str,
             badges_str,
         )
@@ -881,10 +928,14 @@ def add_lodging_to_wanderlog(
     interactive: bool = True,
 ) -> bool:
     """Add hotel lodging to a Wanderlog trip using the wanderlog CLI."""
+    price_desc = hotel.price_text or "N/A"
+    if hotel.genius_price_text:
+        price_desc = f"{hotel.genius_price_text} (Genius discount applied, retail {hotel.price_text})"
+
     booking_notes = notes or (
         f"Booking.com lodging.\n"
         f"Rating: {hotel.rating or 'N/A'}/10 ({hotel.review_word or ''})\n"
-        f"Price: {hotel.price_text or 'N/A'}\n"
+        f"Price: {price_desc}\n"
         f"URL: {hotel.url or 'N/A'}"
     )
 
@@ -914,7 +965,7 @@ def add_lodging_to_wanderlog(
                 f"• Trip Key:   [bold green]{trip_key}[/bold green]\n"
                 f"• Property:   [bold]{hotel.name}[/bold]\n"
                 f"• Dates:      {hotel.check_in} → {hotel.check_out}\n"
-                f"• Price:      {hotel.price_text or 'N/A'}\n"
+                f"• Price:      {price_desc}\n"
                 f"• Address:    {hotel.address or 'N/A'}\n\n"
                 f"Execute command: [dim]{' '.join(cmd)}[/dim]",
                 title="Wanderlog Trip Mutation Confirmation",
@@ -996,7 +1047,23 @@ def run_status_check(config: BookingConfig) -> None:
             "Optional: Set BOOKING_SESSION_COOKIE for web access",
         )
 
-    # 4. Wanderlog CLI
+    # 4. Genius Loyalty
+    genius_lvl = int(os.getenv("GENIUS_LEVEL", os.getenv("BOOKING_GENIUS_LEVEL", str(DEFAULT_GENIUS_LEVEL))))
+    if genius_lvl > 0:
+        disc = int(GENIUS_DISCOUNT_RATES.get(genius_lvl, 0.20) * 100)
+        table.add_row(
+            "Genius Loyalty",
+            f"[bold green]Level {genius_lvl}[/bold green]",
+            f"Active: -{disc}% discount applied to searches (GENIUS_LEVEL={genius_lvl})",
+        )
+    else:
+        table.add_row(
+            "Genius Loyalty",
+            "[dim]Disabled[/dim]",
+            "Set GENIUS_LEVEL=3 in .env to apply 20% loyalty discounts",
+        )
+
+    # 5. Wanderlog CLI
     w_avail = subprocess.run(["which", "wanderlog"], capture_output=True).returncode == 0
     if w_avail:
         table.add_row(
@@ -1041,6 +1108,13 @@ def main() -> None:
         "--currency",
         default=DEFAULT_CURRENCY,
         help=f"Currency code (default: {DEFAULT_CURRENCY})",
+    )
+    search_p.add_argument(
+        "--genius",
+        type=int,
+        choices=[0, 1, 2, 3],
+        default=DEFAULT_GENIUS_LEVEL,
+        help=f"Genius loyalty discount level (0=none, 1=10%, 2=15%, 3=20%, default: {DEFAULT_GENIUS_LEVEL})",
     )
     search_p.add_argument("--limit", type=int, default=10, help="Max results to display (default: 10)")
     search_p.add_argument(
@@ -1106,6 +1180,7 @@ def main() -> None:
                 currency=args.currency,
                 limit=args.limit,
                 provider=args.provider,
+                genius_level=args.genius,
                 config=config,
             )
         except Exception as e:
@@ -1127,6 +1202,7 @@ def main() -> None:
                 "check_out": check_out,
                 "guests": args.guests,
                 "rooms": args.rooms,
+                "genius_level": args.genius,
                 "provider": provider_used,
                 "count": len(hotels),
                 "hotels": [h.to_dict() for h in hotels],
@@ -1140,6 +1216,7 @@ def main() -> None:
                 check_out=check_out,
                 guests=args.guests,
                 provider_name=provider_used,
+                genius_level=args.genius,
             )
 
         # If user passed --add-to-trip, allow choosing a property
