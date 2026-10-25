@@ -23,6 +23,7 @@ from booking import (
     BookingConfig,
     Hotel,
     add_lodging_to_wanderlog,
+    apply_genius_discounts,
     print_pretty_table,
     run_status_check,
     search_apify,
@@ -304,6 +305,32 @@ def test_status_check():
     cfg = BookingConfig(api_key="test-key", apify_token=None, session_cookie=None)
     # Ensure run_status_check executes without errors
     run_status_check(cfg)
+
+
+def test_genius_discount_application():
+    hotels = [
+        Hotel(name="Genius Hotel", hotel_id="101", total_price=500.0, price_text="€ 500.00", currency="EUR")
+    ]
+    # Level 3: 20% off
+    apply_genius_discounts(hotels, genius_level=3)
+    assert hotels[0].genius_price == 400.0
+    assert "€ 400.00" in hotels[0].genius_price_text
+    assert hotels[0].genius_discount_rate == 0.20
+    assert "Genius L3 (-20%)" in hotels[0].badges
+
+    # Level 2: 15% off
+    hotels2 = [
+        Hotel(name="Genius Hotel 2", hotel_id="102", total_price=500.0, price_text="€ 500.00", currency="EUR")
+    ]
+    apply_genius_discounts(hotels2, genius_level=2)
+    assert hotels2[0].genius_price == 425.0
+
+    # Level 1: 10% off
+    hotels1 = [
+        Hotel(name="Genius Hotel 1", hotel_id="103", total_price=500.0, price_text="€ 500.00", currency="EUR")
+    ]
+    apply_genius_discounts(hotels1, genius_level=1)
+    assert hotels1[0].genius_price == 450.0
 
 
 if __name__ == "__main__":

@@ -267,11 +267,11 @@ The workspace includes a high-performance, uv-powered Booking.com integration CL
 # Check status of configured Booking.com providers and Wanderlog CLI
 uv run scripts/booking.py status
 
-# Basic hotel search (defaults to +14 to +18 days)
+# Basic hotel search (defaults to EUR and Genius Level 3 loyalty discounts)
 uv run scripts/booking.py search -l "Tokyo"
 
-# Search with custom dates, guests, currency (defaults to EUR), and rating filter
-uv run scripts/booking.py search -l "Kyoto" -i 2026-11-01 -o 2026-11-05 -g 2 -c EUR --min-rating 8.5
+# Search with custom dates, guests, currency, rating filter, and specific Genius tier
+uv run scripts/booking.py search -l "Kyoto" -i 2026-11-01 -o 2026-11-05 -g 2 -c EUR --min-rating 8.5 --genius 3
 
 # Search and interactively select a property to add to a Wanderlog trip
 uv run scripts/booking.py search -l "Paris" -i 2026-12-01 -o 2026-12-05 --add-to-trip <trip-key>
