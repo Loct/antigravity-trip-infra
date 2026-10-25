@@ -323,6 +323,95 @@ def search_rapidapi(
                     )
                 )
 
+        elif "booking-com18" in host:
+            # Step 1: Destination search via /stays/auto-complete
+            dest_url = f"https://{config.rapidapi_host}/stays/auto-complete"
+            r_dest = client.get(dest_url, params={"query": location}, headers=headers)
+            r_dest.raise_for_status()
+            dest_json = r_dest.json()
+
+            dest_items = dest_json.get("data", [])
+            if not dest_items:
+                raise ValueError(f"No destination found for '{location}'.")
+
+            dest_id = dest_items[0].get("dest_id") or dest_items[0].get("id")
+            search_type = dest_items[0].get("search_type") or dest_items[0].get("dest_type", "city")
+
+            # Step 2: Hotel search via /stays/search
+            search_url = f"https://{config.rapidapi_host}/stays/search"
+            params = {
+                "dest_id": str(dest_id),
+                "search_type": str(search_type),
+                "arrival_date": check_in,
+                "departure_date": check_out,
+                "adults": str(guests),
+                "room_qty": str(rooms),
+                "currency_code": currency,
+                "page_number": "1",
+                "units": "metric",
+                "temperature_unit": "c",
+                "languagecode": "en-us",
+            }
+            r_search = client.get(search_url, params=params, headers=headers)
+            r_search.raise_for_status()
+            res_data = r_search.json().get("data", {})
+            raw_hotels = res_data.get("hotels", [])
+
+            for item in raw_hotels[:limit]:
+                name = item.get("hotel_name") or item.get("name", "Unknown Hotel")
+                hotel_id = str(item.get("hotel_id", item.get("id", "")))
+                rating = item.get("review_score") or item.get("rating")
+                review_count = item.get("review_nr") or item.get("review_count")
+                review_word = item.get("review_score_word") or item.get("review_word")
+
+                price_breakdown = item.get("price_breakdown", {})
+                price_val = price_breakdown.get("gross_price") or price_breakdown.get("all_inclusive_price")
+                if not price_val:
+                    comp = item.get("composite_price_breakdown", {})
+                    items_list = comp.get("items", [])
+                    if items_list:
+                        price_val = items_list[0].get("item_amount", {}).get("value")
+
+                price_curr = item.get("currency_code") or price_breakdown.get("currency", currency)
+                price_str = f"{price_curr} {float(price_val):.2f}" if price_val is not None else None
+
+                lat = item.get("latitude")
+                lng = item.get("longitude")
+                photo_url = item.get("photo_url") or (
+                    item.get("photos", [None])[0] if item.get("photos") else None
+                )
+                url = item.get("url") or f"https://www.booking.com/hotel/{hotel_id}.html"
+
+                badges = []
+                if item.get("is_genius_deal"):
+                    badges.append("Genius Deal")
+                if item.get("is_beach_front") or item.get("isBeachFront"):
+                    badges.append("Beachfront")
+                if item.get("is_free_cancellation") or item.get("isFreeCancellation"):
+                    badges.append("Free cancellation")
+
+                hotels.append(
+                    Hotel(
+                        name=name,
+                        hotel_id=hotel_id,
+                        rating=float(rating) if rating is not None else None,
+                        review_count=int(review_count) if review_count is not None else None,
+                        review_word=review_word,
+                        price_text=price_str,
+                        total_price=float(price_val) if price_val is not None else None,
+                        currency=price_curr,
+                        address=item.get("address") or item.get("city") or location,
+                        latitude=float(lat) if lat is not None else None,
+                        longitude=float(lng) if lng is not None else None,
+                        url=url,
+                        photo_url=photo_url,
+                        badges=badges,
+                        provider="RapidAPI (booking-com18)",
+                        check_in=check_in,
+                        check_out=check_out,
+                    )
+                )
+
         else:
             # Standard booking-com.p.rapidapi.com or compatible
             dest_url = f"https://{config.rapidapi_host}/v1/hotels/locations"
