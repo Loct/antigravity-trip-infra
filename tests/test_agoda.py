@@ -187,7 +187,7 @@ def test_search_apify_mocked():
 
 
 def test_search_hotels_hybrid_fallback():
-    cfg = AgodaConfig(api_key=None, apify_token="mock-token")
+    cfg = AgodaConfig(api_key="", apify_token="mock-token")
     with patch("agoda.search_apify") as mock_apify:
         mock_apify.return_value = [
             Hotel(name="Fallback Agoda Hotel", hotel_id="888", rating=8.6)

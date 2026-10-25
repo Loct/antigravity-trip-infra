@@ -181,7 +181,7 @@ def test_search_apify_mocked():
 
 def test_search_hotels_hybrid_fallback():
     # Test fallback to Apify when RapidAPI key is absent
-    cfg = BookingConfig(api_key=None, apify_token="mock-token")
+    cfg = BookingConfig(api_key="", apify_token="mock-token")
     with patch("booking.search_apify") as mock_apify:
         mock_apify.return_value = [
             Hotel(name="Fallback Hotel", hotel_id="303", rating=8.5)
@@ -224,6 +224,11 @@ def test_add_lodging_to_wanderlog_cmd():
         assert args[4] == "test-trip-key"
         assert "--name" in args
         assert "Hotel Granvia Kyoto" in args
+
+
+def test_default_currency_eur():
+    hotel = Hotel(name="Euro Hotel", hotel_id="555")
+    assert hotel.currency == "EUR"
 
 
 def test_status_check():
