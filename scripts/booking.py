@@ -86,9 +86,7 @@ class BookingConfig:
         else:
             self.api_key = self._resolve_api_key()
 
-        self.rapidapi_host = rapidapi_host or os.getenv(
-            "RAPIDAPI_HOST", "booking-com15.p.rapidapi.com"
-        )
+        self.rapidapi_host = rapidapi_host or self._resolve_rapidapi_host()
 
         if apify_token == "":
             self.apify_token = None
@@ -152,6 +150,39 @@ class BookingConfig:
                 pass
 
         return None
+
+    def _resolve_rapidapi_host(self) -> str:
+        for var in ["RAPIDAPI_HOST", "BOOKING_RAPIDAPI_HOST"]:
+            val = os.getenv(var)
+            if val and val.strip():
+                return val.strip()
+
+        cfg_path = Path.home() / ".config" / "booking" / "api_config.json"
+        if cfg_path.is_file():
+            try:
+                data = json.loads(cfg_path.read_text(encoding="utf-8"))
+                val = data.get("rapidapi_host")
+                if val and str(val).strip():
+                    return str(val).strip()
+            except Exception:
+                pass
+
+        env_path = Path("/workspace/.env")
+        if env_path.is_file():
+            try:
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k in ["RAPIDAPI_HOST", "BOOKING_RAPIDAPI_HOST"] and v:
+                        return v
+            except Exception:
+                pass
+
+        return "booking-com15.p.rapidapi.com"
 
     def _resolve_apify_token(self) -> Optional[str]:
         val = os.getenv("APIFY_TOKEN")
