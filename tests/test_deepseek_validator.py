@@ -40,7 +40,7 @@ def test_provider_config_openrouter_defaults():
         cfg = ProviderConfig()
         assert cfg.provider == "openrouter"
         assert cfg.base_url == "https://openrouter.ai/api/v1"
-        assert cfg.model == "deepseek/deepseek-r1:free"
+        assert cfg.model == "deepseek/deepseek-chat"
         assert cfg.api_key == "sk-or-test"
         assert "HTTP-Referer" in cfg.default_headers
 

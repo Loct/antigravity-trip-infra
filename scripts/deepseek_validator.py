@@ -192,6 +192,7 @@ def fetch_trip_data(target: str) -> Tuple[Dict[str, Any], str]:
 def summarize_trip_context(data: Dict[str, Any], md: str) -> str:
     """
     Assemble a structured, dense text summary of the trip specifically for LLM validation.
+    Builds directly from JSON tripPlan to ensure all days, places, and notes are fully captured.
     """
     tp = data.get("tripPlan", {}) if "tripPlan" in data else data.get("trip", {})
     if not tp and "title" in data:
@@ -202,37 +203,102 @@ def summarize_trip_context(data: Dict[str, Any], md: str) -> str:
     end_date = tp.get("endDate", "N/A")
     place_count = tp.get("placeCount", "N/A")
 
-    summary_lines = [
+    lines = [
         f"# Trip Validation Target: {title}",
         f"- Dates: {start_date} to {end_date}",
+        f"- Total Days: {tp.get('days', 'N/A')}",
         f"- Total Places Listed: {place_count}",
         "",
-        "## Itinerary & Booking Details:",
     ]
 
-    if md.strip():
-        summary_lines.append(md.strip())
-    else:
-        # Fallback to serializing tripPlan keys if markdown was unavailable
-        summary_lines.append(json.dumps(tp, indent=2))
+    itin = tp.get("itinerary", {})
+    sections = itin.get("sections", [])
 
-    return "\n".join(summary_lines)
+    # Lodging section
+    lodging_lines = []
+    for s in sections:
+        if s.get("type") == "hotels":
+            for b in s.get("blocks", []):
+                p = b.get("place", {})
+                lodging_lines.append(f"- {p.get('name')}: {p.get('formatted_address', '')}")
+    if lodging_lines:
+        lines.append("## Lodging / Accommodations:")
+        lines.extend(lodging_lines)
+        lines.append("")
+
+    # Flights section
+    flight_lines = []
+    for s in sections:
+        if s.get("type") == "flights":
+            for b in s.get("blocks", []):
+                finfo = b.get("flightInfo", {})
+                carrier = finfo.get("airline", {}).get("iata", "")
+                num = finfo.get("number", "")
+                dep = b.get("depart", {})
+                arr = b.get("arrive", {})
+                flight_lines.append(
+                    f"- Flight {carrier} {num}: {dep.get('airport', {}).get('name')} "
+                    f"({dep.get('date')} {dep.get('time')}) -> "
+                    f"{arr.get('airport', {}).get('name')} ({arr.get('date')} {arr.get('time')})"
+                )
+    if flight_lines:
+        lines.append("## Flights & Long-Distance Transit:")
+        lines.extend(flight_lines)
+        lines.append("")
+
+    # Daily itinerary
+    lines.append("## Day-by-Day Itinerary & Scheduled Places:")
+    day_idx = 0
+    has_daily_sections = False
+    for s in sections:
+        date = s.get("date")
+        if date:
+            has_daily_sections = True
+            day_idx += 1
+            lines.append(f"### Day {day_idx} ({date}):")
+            blocks = s.get("blocks", [])
+            if not blocks:
+                lines.append("  (No scheduled activities / Transit day)")
+            for b in blocks:
+                btype = b.get("type")
+                if btype == "place":
+                    p = b.get("place", {})
+                    name = p.get("name", "Unknown")
+                    addr = p.get("formatted_address", "")
+                    text_ops = b.get("text", {}).get("ops", [])
+                    note = "".join([op.get("insert", "") for op in text_ops if isinstance(op, dict)]).strip()
+                    note_str = f" | Note: {note}" if note else ""
+                    lines.append(f"  - Place: {name} (Address: {addr}){note_str}")
+                elif btype == "text":
+                    text_ops = b.get("text", {}).get("ops", [])
+                    note = "".join([op.get("insert", "") for op in text_ops if isinstance(op, dict)]).strip()
+                    lines.append(f"  - Note: {note}")
+            lines.append("")
+
+    if md.strip():
+        if not has_daily_sections:
+            lines.append(md.strip())
+        else:
+            lines.append("## Additional Itinerary Markdown:")
+            lines.append(md.strip())
+
+    return "\n".join(lines)
 
 
 VALIDATION_SYSTEM_PROMPT = """You are an elite Travel Itinerary Auditor and Logistical Analyst.
 Your goal is to rigorously review and validate travel itineraries planned in Wanderlog to catch real-world mistakes, logistical friction, and schedule errors.
 
-You MUST analyze the trip across the following 5 critical dimensions:
+You MUST analyze the trip across the following 6 critical dimensions:
 
 1. ⏱️ Schedule Feasibility & Timing:
    - Are daily activities realistic in duration?
-   - Are typical opening/closing hours respected (e.g. museums commonly closed Mondays, night spots visited in the daytime)?
+   - Are typical opening/closing hours respected (e.g. museums commonly closed Mondays, night spots visited in the daytime, Tết New Year holiday closures in Vietnam Feb 5-9)?
    - Are meal breaks (lunch, dinner) accounted for with reasonable buffer times?
    - Are there overlapping or physically conflicting time slots?
 
 2. 🗺️ Geographic Routing & Backtracking:
    - Are places visited on each day clustered by neighborhood / district?
-   - Is there obvious zigzagging or excessive travel back and forth across the city?
+   - Is there obvious zigzagging or excessive travel back and forth across the city or province?
    - Are intra-city travel times feasible?
 
 3. 🏨 Lodging Continuity & Logistics:
@@ -246,8 +312,15 @@ You MUST analyze the trip across the following 5 critical dimensions:
    - Train/transit connections: Buffer for departures and transfers.
 
 5. 🏃 Pacing & Sanity:
-   - Is any day overloaded (e.g. 8+ major sights creating exhaustion)?
+   - Is any day overloaded (e.g. 6+ major sights creating exhaustion)?
    - Is pacing balanced throughout the duration?
+
+6. 🍽️ Dining Notes Audit (Single Unified Lunch & Dinner Note per day):
+   - The user requires EXACTLY ONE unified note per day covering Lunch and Dinner recommendations.
+   - Check every single day (Day 1 through Day 24).
+   - Flag any days that are missing lunch and dinner notes.
+   - Flag any days that have multiple conflicting or duplicate notes attached to different places.
+   - Provide concrete, authentic Vietnamese restaurant recommendations for any day that is missing lunch or dinner.
 
 OUTPUT FORMAT:
 Your response MUST be organized cleanly in GitHub Markdown using this exact structure:
@@ -258,17 +331,21 @@ Your response MUST be organized cleanly in GitHub Markdown using this exact stru
 A concise paragraph summarizing the overall viability, strengths, and primary areas of concern.
 
 ## 🛑 Critical Issues (Must Fix)
-Items that are physically, chronologically, or logistically impossible (e.g. missing hotel night, missed flight buffer, museum visit when closed). If none, state "None detected."
+Items that are physically, chronologically, or logistically impossible. If none, state "None detected."
 
 ## ⚠️ Warnings & Logistical Friction (Recommended Fixes)
-Items that will cause severe stress, excessive transit time, or poor experience (e.g. geographic backtracking, rushed meals, tight connection buffers).
+Items that will cause severe stress, excessive transit time, or poor experience.
 
-## 💡 Suggestions & Route Optimizations
-Concrete ideas to improve the flow, group places by district, or add smart local alternatives.
+## 🍽️ Daily Dining Notes Audit (Lunch & Dinner per Day)
+A complete Markdown table covering all 24 days:
+| Day | Date | Location / Theme | Dining Note Status | Lunch Recommendation | Dinner Recommendation |
+Include notes on days that had duplicate dining notes or missing dining notes.
 
-## 📅 Day-by-Day Audit Highlights
-Brief breakdown of any specific day that needs attention, highlighting:
-- **Day X (Date)**: [Issue & Recommended Adjustment]
+## 📅 Day-by-Day Route & Feasibility Audit
+Thorough evaluation of every single day from Day 1 to Day 24, checking geographic clustering, opening hours, Tết considerations, and flow.
+
+## 💡 Concrete Proposed Fixes for Wanderlog
+Specific adjustments to apply to Wanderlog (swapping places, updating notes, consolidating dining notes).
 
 ## ✅ Final Verdict
 A concluding rating: [EXCELLENT | GOOD WITH MINOR TWEAKS | NEEDS RESTRUCTURING | CRITICAL ERRORS DETECTED]
@@ -307,6 +384,7 @@ def run_validation(
             messages=messages,
             stream=stream,
             temperature=0.3,
+            max_tokens=3500,
         )
 
         if stream:
