@@ -63,6 +63,7 @@ def test_booking_config_resolution(monkeypatch, tmp_path):
     monkeypatch.setenv("BOOKING_API_KEY", "test-api-key")
     monkeypatch.setenv("APIFY_TOKEN", "test-apify-token")
     monkeypatch.setenv("BOOKING_SESSION_COOKIE", "bkng_sso_session=abc")
+    monkeypatch.setenv("RAPIDAPI_HOST", "booking-com15.p.rapidapi.com")
 
     cfg = BookingConfig()
     assert cfg.api_key == "test-api-key"
