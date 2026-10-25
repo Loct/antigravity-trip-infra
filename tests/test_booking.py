@@ -131,6 +131,74 @@ def test_search_rapidapi_mocked():
         assert "Free cancellation" in h.badges
 
 
+def test_search_rapidapi_booking_com18_mocked():
+    mock_dest_resp = MagicMock()
+    mock_dest_resp.json.return_value = {
+        "status": True,
+        "data": [{"dest_id": "-126693", "search_type": "city"}],
+    }
+    mock_dest_resp.raise_for_status = MagicMock()
+
+    mock_hotels_resp = MagicMock()
+    mock_hotels_resp.json.return_value = {
+        "status": True,
+        "data": {
+            "hotels": [
+                {
+                    "hotel_id": 99999,
+                    "hotel_name": "Rome Boutique Stay",
+                    "review_score": 9.1,
+                    "review_nr": 1200,
+                    "review_score_word": "Superb",
+                    "price_breakdown": {
+                        "gross_price": 520.0,
+                        "currency": "EUR",
+                    },
+                    "latitude": 41.9,
+                    "longitude": 12.5,
+                    "photo_url": "https://example.com/rome.jpg",
+                    "url": "https://www.booking.com/hotel/it/rome-boutique.html",
+                    "is_genius_deal": True,
+                    "is_free_cancellation": True,
+                }
+            ]
+        },
+    }
+    mock_hotels_resp.raise_for_status = MagicMock()
+
+    cfg = BookingConfig(
+        api_key="mock-key",
+        rapidapi_host="booking-com18.p.rapidapi.com",
+    )
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.side_effect = [mock_dest_resp, mock_hotels_resp]
+        mock_client_cls.return_value = mock_client
+
+        results = search_rapidapi(
+            location="Rome",
+            check_in="2026-11-01",
+            check_out="2026-11-05",
+            guests=2,
+            rooms=1,
+            currency="EUR",
+            limit=5,
+            config=cfg,
+        )
+
+        assert len(results) == 1
+        h = results[0]
+        assert h.name == "Rome Boutique Stay"
+        assert h.rating == 9.1
+        assert h.total_price == 520.0
+        assert h.currency == "EUR"
+        assert "Genius Deal" in h.badges
+        assert "Free cancellation" in h.badges
+        assert h.provider == "RapidAPI (booking-com18)"
+
+
 def test_search_apify_mocked():
     mock_resp = MagicMock()
     mock_resp.json.return_value = [
