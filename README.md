@@ -44,6 +44,7 @@ Allows you to manage, create, and organize [Wanderlog](https://wanderlog.com) tr
 - ✈️ **Travel Reservations**: Add and manage flights, hotels, and train journeys.
 - 🏨 **Booking.com Lodging Search & Integration**: Search, filter, and compare hotel and lodging accommodations via Booking.com (RapidAPI, Apify residential proxy scraper, or web fallback) and link selected stays directly to Wanderlog trips using `uv run scripts/booking.py`.
 - 🏮 **Agoda Lodging Search & Integration**: Search, filter, and compare hotel room rates and properties via Agoda (RapidAPI, Apify scraper actor, or direct web search) and link selected stays directly to Wanderlog trips using `uv run scripts/agoda.py`.
+- 🧠 **DeepSeek Itinerary Validator (Free OpenRouter Tier)**: Validate and double-check itineraries for scheduling feasibility, geographic backtracking, lodging gaps, and flight buffers using DeepSeek (DeepSeek-R1 / DeepSeek-Chat) via free OpenRouter or custom providers (`uv run scripts/deepseek_validator.py`).
 - 🤖 **Native Antigravity MCP Server**: The `wanderlog` CLI acts as an MCP server (`wanderlog mcp --enable-write`), giving Antigravity first-class tools for trip operations.
 - 🐙 **Git & GitHub CLI Integration**: Full `git` and `gh` CLI capabilities preinstalled with persistent credentials (`github_data`, `git_data`, `ssh_data`) and Git credential helper setup.
 - 🐍 **Python & uv Environment**: Modern, high-performance Python runtime managed by `uv` with Python 3.12 preinstalled for fast dependency management and script execution.
@@ -114,6 +115,17 @@ Run the unified login wizard to authenticate all services in sequence:
   3. Browser session cookie (`AGODA_SESSION_COOKIE`) for web access.
   4. Integration and credentials status verification.
   5. Test hotel search.
+
+- **DeepSeek & OpenRouter Validator Setup**:
+  ```bash
+  ./scripts/login_deepseek.sh
+  ```
+  Provides options to configure:
+  1. OpenRouter (Recommended: 100% Free DeepSeek-R1 & Chat, no credit card required).
+  2. Groq (Free fast inference: `deepseek-r1-distill-llama-70b`).
+  3. Official DeepSeek API Key (`deepseek-reasoner`).
+  4. Local Ollama (offline).
+  5. Connection check and test audit on sample trip (`trips/southern_italy.json`).
 
 ---
 
@@ -310,6 +322,39 @@ uv run scripts/agoda.py search -l "Singapore" -f json
 
 > [!IMPORTANT]
 > **Trip Mutation Policy**: Whenever adding lodging to a Wanderlog trip, confirmation is always required before mutating the itinerary. The exact property details, dates, and trip key are displayed for user approval.
+
+## DeepSeek Wanderlog Itinerary Validator (Free OpenRouter Integration)
+
+The workspace includes an itinerary validation CLI (`scripts/deepseek_validator.py`) and agent skill (`.agents/skills/deepseek-validator/SKILL.md`) powered by DeepSeek via free OpenRouter tier (or Groq, Ollama, official DeepSeek API).
+
+It provides automated second-opinion audits on Wanderlog trips to catch:
+- ⏱️ **Schedule Feasibility & Timing**: Activity duration realism, opening hours (museum closures), meal buffers.
+- 🗺️ **Geographic Routing & Backtracking**: Pinpoints zig-zagging across cities and groups sights by neighborhood.
+- 🏨 **Lodging Continuity**: Catches uncovered nights (no hotel booked) and check-in/out awkward gaps.
+- ✈️ **Transit & Flight Buffers**: 2–3 hour airport arrival margins and transit realism.
+- 🏃 **Pacing**: Balances overloaded vs empty days.
+
+### Usage Examples:
+
+```bash
+# Set up free OpenRouter API key (sk-or-v1-...)
+./scripts/login_deepseek.sh
+
+# Audit a trip by Wanderlog trip ID or URL (uses deepseek-r1 chain-of-thought)
+uv run scripts/deepseek_validator.py <trip_id>
+
+# Fast check mode (uses deepseek-chat)
+uv run scripts/deepseek_validator.py <trip_id> --quick
+
+# Audit local trip JSON file
+uv run scripts/deepseek_validator.py trips/southern_italy.json
+
+# Save audit report to markdown
+uv run scripts/deepseek_validator.py <trip_id> --save-report trips/audit_report.md
+
+# Test connection to configured provider
+uv run scripts/deepseek_validator.py --test
+```
 
 ---
 
