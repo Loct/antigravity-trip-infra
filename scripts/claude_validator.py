@@ -418,6 +418,10 @@ def run_claude_validation_anthropic(
             "type": "enabled",
             "budget_tokens": provider_cfg.thinking_budget,
         }
+    else:
+        model_lower = provider_cfg.model.lower()
+        if "opus" in model_lower or "sonnet-5" in model_lower:
+            create_kwargs["output_config"] = {"effort": "low"}
 
     console.print(
         f"[cyan]Connecting to [bold]Anthropic Claude[/bold] using model [bold green]{provider_cfg.model}[/bold green]"

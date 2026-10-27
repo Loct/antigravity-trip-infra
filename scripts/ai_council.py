@@ -412,13 +412,17 @@ def ask_claude(
             "model": cfg.model,
             "system": system_with_context,
             "messages": messages,
-            "max_tokens": max(cfg.thinking_budget + 2500, 3000) if use_thinking else 2500,
+            "max_tokens": max(cfg.thinking_budget + 2500, 4096) if use_thinking else 4096,
         }
         if use_thinking:
             create_kwargs["thinking"] = {
                 "type": "enabled",
                 "budget_tokens": cfg.thinking_budget,
             }
+        else:
+            model_lower = cfg.model.lower()
+            if "opus" in model_lower or "sonnet-5" in model_lower:
+                create_kwargs["output_config"] = {"effort": "low"}
 
         resp = client.messages.create(**create_kwargs)
         reasoning_list = []
