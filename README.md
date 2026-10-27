@@ -45,6 +45,7 @@ Allows you to manage, create, and organize [Wanderlog](https://wanderlog.com) tr
 - 🏨 **Booking.com Lodging Search & Integration**: Search, filter, and compare hotel and lodging accommodations via Booking.com (RapidAPI, Apify residential proxy scraper, or web fallback) and link selected stays directly to Wanderlog trips using `uv run scripts/booking.py`.
 - 🏮 **Agoda Lodging Search & Integration**: Search, filter, and compare hotel room rates and properties via Agoda (RapidAPI, Apify scraper actor, or direct web search) and link selected stays directly to Wanderlog trips using `uv run scripts/agoda.py`.
 - 🧠 **DeepSeek Itinerary Validator (Free OpenRouter Tier)**: Validate and double-check itineraries for scheduling feasibility, geographic backtracking, lodging gaps, and flight buffers using DeepSeek (DeepSeek-R1 / DeepSeek-Chat) via free OpenRouter or custom providers (`uv run scripts/deepseek_validator.py`).
+- 🎭 **Claude Itinerary Validator & Multi-Model Cross-Checking**: Audit itineraries using Anthropic Claude (Claude 3.7 Sonnet with extended thinking, Claude 3.5 Sonnet, Claude 3.5 Haiku) via `uv run scripts/claude_validator.py` and run simultaneous **Dual AI Cross-Checks** comparing Claude and DeepSeek consensus via `uv run scripts/cross_check_validator.py`.
 - 🤖 **Native Antigravity MCP Server**: The `wanderlog` CLI acts as an MCP server (`wanderlog mcp --enable-write`), giving Antigravity first-class tools for trip operations.
 - 🐙 **Git & GitHub CLI Integration**: Full `git` and `gh` CLI capabilities preinstalled with persistent credentials (`github_data`, `git_data`, `ssh_data`) and Git credential helper setup.
 - 🐍 **Python & uv Environment**: Modern, high-performance Python runtime managed by `uv` with Python 3.12 preinstalled for fast dependency management and script execution.
@@ -126,6 +127,17 @@ Run the unified login wizard to authenticate all services in sequence:
   3. Official DeepSeek API Key (`deepseek-reasoner`).
   4. Local Ollama (offline).
   5. Connection check and test audit on sample trip (`trips/southern_italy.json`).
+
+- **Anthropic Claude & Cross-Checker Setup**:
+  ```bash
+  ./scripts/login_claude.sh
+  ```
+  Provides options to configure:
+  1. Official Anthropic API Key (`sk-ant-...`) with Claude 3.7 Sonnet (Extended Thinking), Claude 3.5 Sonnet, or Claude 3.5 Haiku.
+  2. OpenRouter Claude configuration.
+  3. Check current configuration & test connection.
+  4. Run test audit on sample trip (`trips/southern_italy.json`).
+  5. Run dual cross-check test (Claude + DeepSeek) on sample trip.
 
 ---
 
@@ -352,8 +364,48 @@ uv run scripts/deepseek_validator.py trips/southern_italy.json
 # Save audit report to markdown
 uv run scripts/deepseek_validator.py <trip_id> --save-report trips/audit_report.md
 
+# Cross-check with Claude
+uv run scripts/deepseek_validator.py <trip_id> --cross-check
+
 # Test connection to configured provider
 uv run scripts/deepseek_validator.py --test
+```
+
+---
+
+## Claude Wanderlog Itinerary Validator & Dual AI Cross-Checking
+
+The workspace also integrates **Anthropic Claude** (`scripts/claude_validator.py`) and a unified multi-model cross-checker (`scripts/cross_check_validator.py`) with skill support (`.agents/skills/claude-validator/SKILL.md`).
+
+Key capabilities:
+- 🎭 **Claude 3.7 Sonnet Extended Thinking**: Leverages Anthropic's hybrid reasoning engine to analyze complex schedules, opening hours, and pacing.
+- ⚖️ **Dual AI Cross-Checking**: Compares independent analyses from both Claude and DeepSeek to isolate unanimous consensus issues (high priority) and model-specific nuances.
+- ⚡ **Haiku Quick Mode**: Low-latency, budget-friendly validation using `claude-3-5-haiku-20241022`.
+
+### Usage Examples:
+
+```bash
+# Configure Anthropic API key (sk-ant-...) and preferred model
+./scripts/login_claude.sh
+
+# Audit a trip using Claude
+uv run scripts/claude_validator.py <trip_id>
+
+# Fast check mode with Claude Haiku
+uv run scripts/claude_validator.py <trip_id> --quick
+
+# Cross-check itinerary with BOTH Claude and DeepSeek
+uv run scripts/cross_check_validator.py <trip_id>
+# Or via flag on either validator:
+uv run scripts/claude_validator.py <trip_id> --cross-check
+uv run scripts/deepseek_validator.py <trip_id> --cross-check
+
+# Save cross-check consensus report
+uv run scripts/cross_check_validator.py <trip_id> --save-report trips/cross_check.md
+
+# Test connectivity for Claude (or both models)
+uv run scripts/claude_validator.py --test
+uv run scripts/cross_check_validator.py --test
 ```
 
 ---

@@ -51,6 +51,13 @@ uv run scripts/deepseek_validator.py <trip_id> --quick
 uv run scripts/deepseek_validator.py <trip_id> --save-report trips/audit_report.md
 ```
 
+### Cross-Check with Claude (Dual AI Verification)
+```bash
+uv run scripts/deepseek_validator.py <trip_id> --cross-check
+# or directly:
+uv run scripts/cross_check_validator.py <trip_id>
+```
+
 ### Test Connectivity
 ```bash
 uv run scripts/deepseek_validator.py --test
