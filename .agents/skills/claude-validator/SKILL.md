@@ -47,6 +47,19 @@ uv run scripts/claude_validator.py trips/southern_italy.json
 uv run scripts/claude_validator.py <trip_id> --quick
 ```
 
+### Conversational Co-Planning & Cross-Checking (Recommended)
+Converse live with Claude alongside DeepSeek rather than running a static audit:
+```bash
+# Ask Claude a targeted cultural or dining question
+uv run scripts/ai_council.py "Evaluate restaurant atmosphere and pacing for Day 2" --trip <trip_id> --ai claude
+
+# Conversational cross-check with DeepSeek
+uv run scripts/ai_council.py --trip <trip_id> --crosscheck --day 2
+
+# Multi-turn conversational session
+uv run scripts/ai_council.py "What are authentic dinner alternatives near Hoan Kiem?" --session my_trip --trip <trip_id>
+```
+
 ### Save Audit Report as Markdown
 ```bash
 uv run scripts/claude_validator.py <trip_id> --save-report trips/claude_report.md

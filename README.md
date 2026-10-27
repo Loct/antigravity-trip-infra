@@ -410,29 +410,35 @@ uv run scripts/cross_check_validator.py --test
 
 ---
 
-## 🏛️ Conversational AI Travel Council (Multi-AI Co-Planning)
+## 🏛️ Conversational AI Travel Council (Multi-AI Co-Planning & Cross-Checking)
 
-Rather than only generating static markdown reports, Antigravity and the user can query multiple external AIs (Claude and DeepSeek) **conversationally** to debate route options, double-check specific days, and cross-examine dining and transit logistics.
+Rather than only generating static markdown reports, Antigravity and the user actively collaborate with multiple external AIs (Claude and DeepSeek) **conversationally** to cross-check itinerary data, debate route dilemmas, double-check specific days, and cross-examine dining and transit logistics.
 
 Supported modes via `scripts/ai_council.py` & `.agents/skills/ai-travel-council/SKILL.md`:
-- 💬 **Targeted Questions**: Ask specific questions focused on one day or the whole trip.
-- 🏛️ **Dual Council Consultation**: Queries both Claude and DeepSeek to present two independent perspectives.
-- 🗣️ **Interactive Chat Session**: Engage in live multi-turn discussion in the terminal.
+- 💬 **Targeted Questions & Co-Planning**: Ask specific questions focused on one day, place, or the whole trip.
+- 🔄 **Multi-Turn Sessions (`--session`)**: Maintain conversational memory across turns so Claude and DeepSeek remember previous points and react to each other.
+- 🔍 **Two-Round Mutual Data Cross-Check (`--crosscheck`)**: Claude reviews cultural flow and opening hours; DeepSeek reviews transit and backtracking; then they cross-examine each other's suggestions to identify discrepancies.
+- ⚔️ **Structured Itinerary Debate (`--debate`)**: Put travel dilemmas to a head-to-head debate between Claude (experience & pacing) and DeepSeek (logistics & efficiency).
+- 🗣️ **Interactive Chat Session (`--interactive`)**: Engage in live multi-turn discussion in the terminal with `/crosscheck`, `/debate`, and `/history` commands.
 
 ### Usage Examples:
 
 ```bash
-# Ask both Claude and DeepSeek a focused question about Day 4
+# 1. Ask both Claude and DeepSeek a focused question about Day 4
 uv run scripts/ai_council.py "Is our Day 4 schedule too packed with morning travel?" --trip trips/vietnam.json --day 4
 
-# Ask Claude specifically about restaurant recommendations for Day 2
-uv run scripts/ai_council.py "Suggest authentic local dinner near Hoan Kiem" --trip <trip_id> --day 2 --ai claude
+# 2. Multi-turn dialogue with session memory
+uv run scripts/ai_council.py "Can we fit Cu Chi tunnels in the morning?" --trip trips/vietnam.json --session saigon_plan
+uv run scripts/ai_council.py "DeepSeek said traffic is heavy at noon. Claude, what should we do instead?" --session saigon_plan
 
-# Ask DeepSeek specifically to calculate transit and route feasibility
-uv run scripts/ai_council.py "Check driving time and route between Naples and Amalfi" --trip trips/southern_italy.json --ai deepseek
+# 3. Two-round mutual data cross-check (transit, dining, hours, hotels, or all)
+uv run scripts/ai_council.py --trip trips/vietnam.json --crosscheck --day 3 --aspect dining
 
-# Launch interactive terminal chat with the Council
-uv run scripts/ai_council.py --trip <trip_id> --interactive
+# 4. Structured travel debate
+uv run scripts/ai_council.py --trip trips/vietnam.json --debate "Overnight sleeper train vs morning flight from Hanoi to Da Nang"
+
+# 5. Launch interactive terminal chat with the Council
+uv run scripts/ai_council.py --trip trips/vietnam.json --interactive
 ```
 
 ---

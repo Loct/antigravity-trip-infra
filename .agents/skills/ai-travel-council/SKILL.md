@@ -1,80 +1,112 @@
 ---
 name: ai-travel-council
-description: Conversationally consult and leverage multiple external AIs (Anthropic Claude, DeepSeek, Groq) to double-check Wanderlog itineraries, debate route pacing, audit specific days, and cross-examine dining and transit logistics.
+description: Conversationally consult and collaborate with external AIs (Anthropic Claude and DeepSeek) to cross-check trip data, debate itinerary choices, ask logistical questions, and maintain multi-turn co-planning dialogues.
 ---
 
 # Conversational AI Travel Council Skill
 
-This skill enables Antigravity to consult a **Council of External AI Advisors** (Anthropic Claude and DeepSeek) during conversation with the user. Instead of relying on a single model's reasoning, Antigravity can ping Claude, DeepSeek, or both in real time to double-check travel decisions, verify feasibility, and debate alternatives.
+This skill enables Antigravity to actively converse and collaborate with a **Council of External AI Advisors** (Anthropic Claude and DeepSeek). Rather than relying on static one-shot audit reports, Antigravity engages in a dynamic, multi-turn conversational exchange with Claude and DeepSeek to cross-check itinerary data, ask specific questions about the trip, debate trade-offs, and synthesize verified recommendations for the user.
 
 ---
 
 ## 1. When to Use This Skill
 
 Activate this skill when:
-- The user asks to **"double check this with other AIs"**, **"ask Claude and DeepSeek"**, or **"get a second opinion"**.
-- The user is uncertain about a specific day or route (e.g., *"Is Day 4 too rushed?"*, *"Will we have enough time to catch the ferry?"*).
-- Cross-checking dining recommendations or authentic local food suggestions.
-- Finalizing a complex itinerary and running a multi-perspective consensus audit.
+- **Planning or modifying an itinerary**: Bounce ideas off Claude and DeepSeek before presenting proposals to the user.
+- **Cross-checking trip data**: Verifying transit times, opening hours, dining quality/authenticity, and lodging continuity.
+- **Addressing user uncertainties**: When the user asks *"Is Day 4 too rushed?"*, *"Should we take the train or fly?"*, or *"Can we double check this with Claude and DeepSeek?"*.
+- **Debating itinerary dilemmas**: Weighing experiential appeal vs logistical efficiency.
+- **Multi-turn dialogue**: Asking follow-up questions while maintaining conversation context across turns.
 
 ---
 
-## 2. Querying the Travel Council via CLI
+## 2. Model Roles & Specializations
+
+| Advisor | Specialization | Focus Areas |
+| :--- | :--- | :--- |
+| **Anthropic Claude** | Culture, Dining & Experience | Pacing, atmosphere, ambiance, holiday/museum closures (e.g. Tết, Monday closures), authentic local dining, and avoiding traveler burnout. |
+| **DeepSeek** | Logistics, Transit & Geometry | Travel times, rush-hour traffic buffers, geographic clustering vs zigzagging/backtracking, airport check-in margins (2-3 hrs), and lodging continuity. |
+| **Antigravity (Lead)** | Synthesis & Live Execution | Facilitates dialogue, evaluates trade-offs, verifies Wanderlog MCP data, and proposes vetted mutations for user confirmation. |
+
+---
+
+## 3. Conversational CLI Commands
 
 Antigravity executes `scripts/ai_council.py` using `run_command`:
 
-### Double-Check a Specific Question Across Both AIs (Claude + DeepSeek)
+### A. Ask a Targeted Question (Conversational Co-Planning)
 ```bash
-uv run scripts/ai_council.py "Is the schedule on Day 3 feasible with afternoon traffic?" --trip <trip_id_or_file> --day 3 --format json
+uv run scripts/ai_council.py "Should we visit West Lake or Train Street at sunset on Day 1?" --trip <trip_id_or_file> --day 1 --format json
 ```
 
-### Consult Specifically with Claude
+### B. Multi-Turn Conversational Session
+Retain conversational memory across turns so Claude and DeepSeek remember previous points and react to each other:
 ```bash
-uv run scripts/ai_council.py "Evaluate museum opening hours and cultural flow for Days 1-3" --trip <trip_id_or_file> --days 1,2,3 --ai claude --format json
+# Turn 1:
+uv run scripts/ai_council.py "Can we fit Cu Chi tunnels and War Remnants Museum in the same morning?" --trip <trip_id_or_file> --session trip_hcmc --format json
+
+# Turn 2 (Follow-up):
+uv run scripts/ai_council.py "DeepSeek suggested shifting the museum to afternoon. Claude, does that leave enough time for Ben Thanh market?" --session trip_hcmc --format json
 ```
 
-### Consult Specifically with DeepSeek
+### C. Mutual Data Cross-Check (Two-Round Peer Review)
+Performs a deep 2-round cross-check: Round 1 independent audits, followed by Round 2 where DeepSeek cross-examines Claude's suggestions for transit bottlenecks, and Claude cross-examines DeepSeek's suggestions for cultural flow:
 ```bash
-uv run scripts/ai_council.py "Calculate driving buffers and backtracking between these sights" --trip <trip_id_or_file> --ai deepseek --format json
+# Full trip cross-check
+uv run scripts/ai_council.py --trip <trip_id_or_file> --crosscheck --format json
+
+# Specific day and aspect cross-check
+uv run scripts/ai_council.py --trip <trip_id_or_file> --crosscheck --day 3 --aspect dining --format json
+# Aspects: all | transit | dining | hours | hotels
 ```
 
-### Full Conversational Multi-AI Audit
+### D. Structured Itinerary Debate
+Have Claude and DeepSeek debate an itinerary dilemma with opening arguments, cross-talk rebuttals, and consensus:
 ```bash
-uv run scripts/ai_council.py --trip <trip_id_or_file> --audit --format json
+uv run scripts/ai_council.py --trip <trip_id_or_file> --debate "Overnight sleeper train vs morning flight from Hanoi to Da Nang" --format json
 ```
 
-### User Interactive Terminal Council Mode
-When the user wants to chat live with the models in their own terminal:
+### E. Interactive Live Terminal Chat
+For the user to chat directly with both models in real time:
 ```bash
 uv run scripts/ai_council.py --trip <trip_id_or_file> --interactive
 ```
+Interactive commands:
+- `/crosscheck [day]` - Run two-round data cross-check
+- `/debate <topic>` - Debate a choice
+- `/history` - View previous conversational turns
+- `/clear` - Reset session memory
 
 ---
 
-## 3. Conversational Synthesis Format
+## 4. Conversational Synthesis Format
 
-When presenting council insights back to the user in chat, structure your response cleanly:
+When presenting council insights back to the user in chat, synthesize the conversational exchange naturally:
 
 ```markdown
-### 🏛️ Travel Council Consultation: [Topic / Question]
+### 🏛️ Council Co-Planning: [Topic / Question]
 
-#### 🎭 Claude's Take
+> *I conferred with Claude and DeepSeek to cross-check this decision.*
+
+#### 🎭 Claude's Take (Experience & Culture)
 [Concise summary of Claude's perspective, emphasizing cultural nuances, opening hours, or pacing]
 
-#### 🧠 DeepSeek's Take
+#### 🧠 DeepSeek's Take (Logistics & Transit)
 [Concise summary of DeepSeek's perspective, emphasizing transit buffers, routing logistics, or timing conflicts]
 
-#### ⚖️ Antigravity Synthesis & Recommendation
-- **Consensus**: Points where both models agree.
-- **Key Divergence / Trade-offs**: Nuances where their suggestions differ.
-- **Recommended Next Step**: Concrete proposed adjustment to the Wanderlog plan.
+#### ⚔️ Cross-Talk & Peer Review
+- **Points of Agreement**: Where both models verified the data.
+- **Key Divergence / Trade-offs**: Nuances where their perspectives differed.
+
+#### ⚖️ Antigravity Recommendation
+[Specific vetted recommendation for the Wanderlog itinerary]
 ```
 
 ---
 
-## 4. Important Safety Invariant
+## 5. Important Safety Invariant
 
 > [!IMPORTANT]
 > **Trip Mutation Confirmation**:
-> External AIs may suggest changes (e.g., moving activities, changing dates, deleting duplicate notes).
+> External AIs may suggest changes (e.g., swapping activities, moving dates, adjusting dining).
 > **Always ask the user for confirmation** before making any mutations to the Wanderlog trip via MCP tools!

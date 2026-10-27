@@ -13,3 +13,14 @@
 - **Branch Awareness**:
   1. If currently on a feature branch that has been merged or is clean, switch to `main` (`git checkout main`) prior to running the update script so upstream commits are fetched.
   2. First run `/workspace/scripts/self_update.sh --check` or execute `/workspace/scripts/self_update.sh` to pull changes, check `agy` CLI binary updates, and trigger Docker rebuilds/restarts if infrastructure files changed.
+
+## Conversational AI Travel Council (Claude & DeepSeek)
+- **Conversational Collaboration & Cross-Checking**:
+  When planning, modifying, auditing, or discussing a trip, do not act in isolation or rely on rigid one-way audit dumps. Actively converse with Anthropic Claude and DeepSeek using `scripts/ai_council.py`:
+  1. **Ask Targeted Questions**: Bounce ideas off the council (`uv run scripts/ai_council.py "<question>" --trip <id_or_file> --session <session_id> --format json`).
+  2. **Cross-Check Itinerary Data**: Perform 2-round mutual peer review on transit, opening hours, dining authenticity, and hotel continuity (`uv run scripts/ai_council.py --trip <id_or_file> --crosscheck [--day <N>] [--aspect transit|dining|hours|hotels|all]`).
+  3. **Debate Itinerary Options**: Run structured debates on travel dilemmas (`uv run scripts/ai_council.py --trip <id_or_file> --debate "<topic>"`).
+- **Conversational Synthesis**:
+  Present the dialogue naturally to the user: Claude's cultural/experiential view, DeepSeek's transit/logistics view, their cross-talk review of each other, and Antigravity's vetted recommendation.
+- **Trip Mutation Confirmation**:
+  Always ask for user confirmation before executing any mutations to Wanderlog trips.

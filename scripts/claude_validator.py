@@ -122,7 +122,9 @@ class ClaudeProviderConfig:
             self.model = self.model or "claude-3-7-sonnet-20250219"
         elif self.provider == "openrouter":
             self.base_url = self.base_url or "https://openrouter.ai/api/v1"
-            self.model = self.model or "anthropic/claude-3.7-sonnet"
+            # Default to active Claude model on OpenRouter (claude-sonnet-4.5)
+            if not self.model or self.model in ("anthropic/claude-3.7-sonnet", "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022"):
+                self.model = "anthropic/claude-sonnet-4.5"
             self.default_headers = {
                 "HTTP-Referer": "https://wanderlog.com",
                 "X-Title": "Antigravity Wanderlog Claude Trip Validator",
