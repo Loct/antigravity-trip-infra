@@ -419,8 +419,6 @@ def ask_claude(
                 "type": "enabled",
                 "budget_tokens": cfg.thinking_budget,
             }
-        else:
-            create_kwargs["temperature"] = 0.4
 
         resp = client.messages.create(**create_kwargs)
         reasoning_list = []

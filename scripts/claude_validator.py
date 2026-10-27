@@ -119,7 +119,7 @@ class ClaudeProviderConfig:
         # Provider defaults
         if self.provider == "anthropic":
             self.base_url = self.base_url or "https://api.anthropic.com"
-            self.model = self.model or "claude-3-7-sonnet-20250219"
+            self.model = self.model or "claude-opus-5"
         elif self.provider == "openrouter":
             self.base_url = self.base_url or "https://openrouter.ai/api/v1"
             # Default to active Claude model on OpenRouter (claude-sonnet-4.5)
@@ -418,8 +418,6 @@ def run_claude_validation_anthropic(
             "type": "enabled",
             "budget_tokens": provider_cfg.thinking_budget,
         }
-    else:
-        create_kwargs["temperature"] = 0.3
 
     console.print(
         f"[cyan]Connecting to [bold]Anthropic Claude[/bold] using model [bold green]{provider_cfg.model}[/bold green]"
@@ -595,7 +593,7 @@ def verify_connection(provider_cfg: ClaudeProviderConfig) -> bool:
             resp = client.messages.create(
                 model=provider_cfg.model,
                 messages=[{"role": "user", "content": "Respond with 'VALIDATOR_READY' if you can read this."}],
-                max_tokens=20,
+                max_tokens=600,
             )
             content = "".join(b.text for b in getattr(resp, "content", []) if getattr(b, "type", "") == "text")
 

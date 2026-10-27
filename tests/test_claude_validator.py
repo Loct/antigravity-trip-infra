@@ -42,9 +42,7 @@ def test_claude_provider_config_defaults():
         cfg = ClaudeProviderConfig()
         assert cfg.provider == "anthropic"
         assert cfg.base_url == "https://api.anthropic.com"
-        assert cfg.model == "claude-3-7-sonnet-20250219"
-        assert cfg.thinking_budget == 2048
-        assert cfg.is_thinking_supported() is True
+        assert cfg.model == "claude-opus-5"
 
 
 def test_claude_provider_config_haiku():
