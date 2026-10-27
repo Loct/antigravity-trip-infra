@@ -509,6 +509,11 @@ def main() -> None:
         help="Save generated Markdown report to specified file path",
     )
     parser.add_argument(
+        "--cross-check",
+        action="store_true",
+        help="Cross-check this itinerary with Claude as well to compare findings",
+    )
+    parser.add_argument(
         "--test",
         action="store_true",
         help="Run a connectivity test to the configured provider",
@@ -523,6 +528,23 @@ def main() -> None:
 
     if args.list:
         list_wanderlog_trips()
+        return
+
+    if args.cross_check and args.trip:
+        cross_check_script = Path(__file__).parent / "cross_check_validator.py"
+        cmd = [
+            "uv",
+            "run",
+            str(cross_check_script),
+            args.trip,
+            "--format",
+            args.format,
+        ]
+        if args.save_report:
+            cmd.extend(["--save-report", args.save_report])
+        if args.quick:
+            cmd.append("--quick")
+        subprocess.run(cmd, check=False)
         return
 
     model_override = args.model

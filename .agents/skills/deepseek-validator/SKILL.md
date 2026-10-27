@@ -46,9 +46,29 @@ uv run scripts/deepseek_validator.py trips/southern_italy.json
 uv run scripts/deepseek_validator.py <trip_id> --quick
 ```
 
+### Conversational Co-Planning & Cross-Checking (Recommended)
+Converse live with DeepSeek alongside Claude rather than running a static audit:
+```bash
+# Ask DeepSeek a targeted routing or buffer question
+uv run scripts/ai_council.py "Check driving times and buffer between sights on Day 3" --trip <trip_id> --ai deepseek
+
+# Conversational cross-check with Claude
+uv run scripts/ai_council.py --trip <trip_id> --crosscheck --day 3
+
+# Multi-turn conversational session
+uv run scripts/ai_council.py "How can we avoid morning traffic?" --session my_trip --trip <trip_id>
+```
+
 ### Save Audit Report as Markdown
 ```bash
 uv run scripts/deepseek_validator.py <trip_id> --save-report trips/audit_report.md
+```
+
+### Cross-Check with Claude (Dual AI Verification)
+```bash
+uv run scripts/deepseek_validator.py <trip_id> --cross-check
+# or directly:
+uv run scripts/cross_check_validator.py <trip_id>
 ```
 
 ### Test Connectivity

@@ -15,6 +15,7 @@ echo "  Step 3: (Optional) Authenticate with GitHub CLI & Git"
 echo "  Step 4: (Optional) Authenticate with Booking.com"
 echo "  Step 5: (Optional) Authenticate with Agoda"
 echo "  Step 6: (Optional) Configure DeepSeek / OpenRouter Trip Validator"
+echo "  Step 7: (Optional) Configure Anthropic Claude Trip Validator & Cross-Checking"
 echo ""
 read -r -p "Press [Enter] to proceed..." || true
 
@@ -60,6 +61,15 @@ if [[ "$SETUP_DS" =~ ^[Yy]$ ]]; then
   "$SCRIPT_DIR/login_deepseek.sh"
 else
   echo "[-] Skipping DeepSeek setup. You can run './scripts/login_deepseek.sh' anytime."
+fi
+
+echo ""
+echo "=== Step 7: Anthropic Claude Trip Validator & Cross-Checking (Optional) ==="
+read -r -p "Do you want to configure Anthropic Claude to validate trips & enable cross-checking? [y/N]: " SETUP_CLAUDE || true
+if [[ "$SETUP_CLAUDE" =~ ^[Yy]$ ]]; then
+  "$SCRIPT_DIR/login_claude.sh"
+else
+  echo "[-] Skipping Claude setup. You can run './scripts/login_claude.sh' anytime."
 fi
 
 echo ""
