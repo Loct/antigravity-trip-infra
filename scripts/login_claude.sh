@@ -34,8 +34,9 @@ echo "  2) OpenRouter Claude (Route Claude requests through OpenRouter)"
 echo "  3) Check current Claude configuration & test connection"
 echo "  4) Run test audit on sample trip (trips/southern_italy.json)"
 echo "  5) Run dual cross-check test (Claude + DeepSeek) on sample trip"
+echo "  6) Launch conversational AI Council chat on sample trip"
 echo ""
-read -r -p "Enter choice [1-5]: " CHOICE || true
+read -r -p "Enter choice [1-6]: " CHOICE || true
 
 case "$CHOICE" in
   1)
@@ -163,6 +164,12 @@ case "$CHOICE" in
     echo ""
     echo "Running Dual AI Cross-Check (Claude + DeepSeek) on trips/southern_italy.json..."
     uv run "$SCRIPT_DIR/cross_check_validator.py" "$REPO_ROOT/trips/southern_italy.json"
+    ;;
+
+  6)
+    echo ""
+    echo "Launching Conversational AI Council chat on trips/southern_italy.json..."
+    uv run "$SCRIPT_DIR/ai_council.py" --trip "$REPO_ROOT/trips/southern_italy.json" --interactive
     ;;
 
   *)

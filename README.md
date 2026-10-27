@@ -410,6 +410,33 @@ uv run scripts/cross_check_validator.py --test
 
 ---
 
+## 🏛️ Conversational AI Travel Council (Multi-AI Co-Planning)
+
+Rather than only generating static markdown reports, Antigravity and the user can query multiple external AIs (Claude and DeepSeek) **conversationally** to debate route options, double-check specific days, and cross-examine dining and transit logistics.
+
+Supported modes via `scripts/ai_council.py` & `.agents/skills/ai-travel-council/SKILL.md`:
+- 💬 **Targeted Questions**: Ask specific questions focused on one day or the whole trip.
+- 🏛️ **Dual Council Consultation**: Queries both Claude and DeepSeek to present two independent perspectives.
+- 🗣️ **Interactive Chat Session**: Engage in live multi-turn discussion in the terminal.
+
+### Usage Examples:
+
+```bash
+# Ask both Claude and DeepSeek a focused question about Day 4
+uv run scripts/ai_council.py "Is our Day 4 schedule too packed with morning travel?" --trip trips/vietnam.json --day 4
+
+# Ask Claude specifically about restaurant recommendations for Day 2
+uv run scripts/ai_council.py "Suggest authentic local dinner near Hoan Kiem" --trip <trip_id> --day 2 --ai claude
+
+# Ask DeepSeek specifically to calculate transit and route feasibility
+uv run scripts/ai_council.py "Check driving time and route between Naples and Amalfi" --trip trips/southern_italy.json --ai deepseek
+
+# Launch interactive terminal chat with the Council
+uv run scripts/ai_council.py --trip <trip_id> --interactive
+```
+
+---
+
 ## How Antigravity Interacts with Wanderlog
 
 The workspace includes:
