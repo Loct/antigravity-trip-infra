@@ -341,29 +341,32 @@ def test_genius_discount_application():
 
 
 def test_build_booking_hotel_url():
-    # With country code and dates
+    # With canonical url from provider and dates
     url = build_booking_hotel_url(
-        name="Tam Coc Peaceful Nature",
-        country_code="vn",
+        name="Tam Coc Victoria Hotel",
+        canonical_url="https://www.booking.com/hotel/vn/tam-coc-victoria.html",
         check_in="2027-01-27",
         check_out="2027-01-29",
         guests=2,
         rooms=1,
     )
-    assert "https://www.booking.com/hotel/vn/tam-coc-peaceful-nature.html" in url
+    assert "https://www.booking.com/hotel/vn/tam-coc-victoria.html" in url
     assert "checkin=2027-01-27" in url
     assert "checkout=2027-01-29" in url
     assert "group_adults=2" in url
 
-    # Without country code fallback to search
+    # Default to search link without canonical URL
     url_fallback = build_booking_hotel_url(
-        name="Grand Hotel",
-        country_code=None,
+        name="Tam Coc Victoria Hotel",
+        canonical_url=None,
         check_in="2027-01-27",
         check_out="2027-01-29",
+        guests=2,
+        rooms=1,
     )
     assert "https://www.booking.com/searchresults.html" in url_fallback
-    assert "ss=Grand+Hotel" in url_fallback
+    assert "ss=Tam+Coc+Victoria+Hotel" in url_fallback
+    assert "checkin=2027-01-27" in url
 
 
 if __name__ == "__main__":

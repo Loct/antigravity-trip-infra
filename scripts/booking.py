@@ -83,6 +83,7 @@ class Hotel:
 
 def build_booking_hotel_url(
     name: str,
+    canonical_url: Optional[str] = None,
     country_code: Optional[str] = None,
     hotel_id: Optional[str] = None,
     check_in: Optional[str] = None,
@@ -98,9 +99,8 @@ def build_booking_hotel_url(
         params["group_adults"] = str(guests)
         params["no_rooms"] = str(rooms)
 
-    if country_code and name:
-        slug = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-")
-        base = f"https://www.booking.com/hotel/{country_code.lower()}/{slug}.html"
+    if canonical_url and "booking.com" in canonical_url:
+        base = canonical_url.split("?")[0]
     else:
         base = "https://www.booking.com/searchresults.html"
         params["ss"] = name
