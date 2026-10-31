@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -42,6 +43,12 @@ err_console = Console(stderr=True)
 
 
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", os.getenv("BOOKING_CURRENCY", "EUR"))
+DEFAULT_GENIUS_LEVEL = int(os.getenv("GENIUS_LEVEL", os.getenv("BOOKING_GENIUS_LEVEL", "3")))
+GENIUS_DISCOUNT_RATES = {
+    1: 0.10,  # Level 1: 10%
+    2: 0.15,  # Level 2: 15%
+    3: 0.20,  # Level 3: 20%
+}
 _UNSET = object()
 
 
@@ -56,6 +63,10 @@ class Hotel:
     price_per_night: Optional[float] = None
     total_price: Optional[float] = None
     currency: str = DEFAULT_CURRENCY
+    genius_price: Optional[float] = None
+    genius_price_text: Optional[str] = None
+    is_genius_deal: bool = False
+    genius_discount_rate: float = 0.0
     address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -68,6 +79,35 @@ class Hotel:
 
     def to_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
+
+
+def build_booking_hotel_url(
+    name: str,
+    country_code: Optional[str] = None,
+    hotel_id: Optional[str] = None,
+    check_in: Optional[str] = None,
+    check_out: Optional[str] = None,
+    guests: int = 2,
+    rooms: int = 1,
+) -> str:
+    """Build a valid Booking.com property URL or deep search link."""
+    params: Dict[str, str] = {}
+    if check_in and check_out:
+        params["checkin"] = check_in
+        params["checkout"] = check_out
+        params["group_adults"] = str(guests)
+        params["no_rooms"] = str(rooms)
+
+    if country_code and name:
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-")
+        base = f"https://www.booking.com/hotel/{country_code.lower()}/{slug}.html"
+    else:
+        base = "https://www.booking.com/searchresults.html"
+        params["ss"] = name
+
+    if params:
+        return f"{base}?{urllib.parse.urlencode(params)}"
+    return base
 
 
 class BookingConfig:
@@ -86,9 +126,7 @@ class BookingConfig:
         else:
             self.api_key = self._resolve_api_key()
 
-        self.rapidapi_host = rapidapi_host or os.getenv(
-            "RAPIDAPI_HOST", "booking-com15.p.rapidapi.com"
-        )
+        self.rapidapi_host = rapidapi_host or self._resolve_rapidapi_host()
 
         if apify_token == "":
             self.apify_token = None
@@ -152,6 +190,39 @@ class BookingConfig:
                 pass
 
         return None
+
+    def _resolve_rapidapi_host(self) -> str:
+        for var in ["RAPIDAPI_HOST", "BOOKING_RAPIDAPI_HOST"]:
+            val = os.getenv(var)
+            if val and val.strip():
+                return val.strip()
+
+        cfg_path = Path.home() / ".config" / "booking" / "api_config.json"
+        if cfg_path.is_file():
+            try:
+                data = json.loads(cfg_path.read_text(encoding="utf-8"))
+                val = data.get("rapidapi_host")
+                if val and str(val).strip():
+                    return str(val).strip()
+            except Exception:
+                pass
+
+        env_path = Path("/workspace/.env")
+        if env_path.is_file():
+            try:
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k in ["RAPIDAPI_HOST", "BOOKING_RAPIDAPI_HOST"] and v:
+                        return v
+            except Exception:
+                pass
+
+        return "booking-com15.p.rapidapi.com"
 
     def _resolve_apify_token(self) -> Optional[str]:
         val = os.getenv("APIFY_TOKEN")
@@ -237,6 +308,11 @@ def search_rapidapi(
         "X-RapidAPI-Key": config.api_key,
         "X-RapidAPI-Host": config.rapidapi_host,
     }
+    if config.session_cookie:
+        cookie_header = config.session_cookie
+        if "bkng_sso" not in cookie_header and "=" not in cookie_header:
+            cookie_header = f"bkng_sso_session={cookie_header}"
+        headers["Cookie"] = cookie_header
 
     with httpx.Client(timeout=30.0) as client:
         # Check host type
@@ -293,7 +369,16 @@ def search_rapidapi(
                 lat = prop.get("latitude")
                 lng = prop.get("longitude")
                 photo_url = prop.get("photoUrls", [None])[0] if prop.get("photoUrls") else None
-                url = f"https://www.booking.com/hotel/{hotel_id}.html"
+                country_code = prop.get("countryCode")
+                url = build_booking_hotel_url(
+                    name=name,
+                    country_code=country_code,
+                    hotel_id=hotel_id,
+                    check_in=check_in,
+                    check_out=check_out,
+                    guests=guests,
+                    rooms=rooms,
+                )
 
                 badges = []
                 if prop.get("isBeachFront"):
@@ -318,6 +403,96 @@ def search_rapidapi(
                         photo_url=photo_url,
                         badges=badges,
                         provider="RapidAPI (Booking.com)",
+                        check_in=check_in,
+                        check_out=check_out,
+                    )
+                )
+
+        elif "booking-com18" in host:
+            # Step 1: Destination search via /stays/auto-complete
+            dest_url = f"https://{config.rapidapi_host}/stays/auto-complete"
+            r_dest = client.get(dest_url, params={"query": location}, headers=headers)
+            r_dest.raise_for_status()
+            dest_json = r_dest.json()
+
+            dest_items = dest_json.get("data", [])
+            if not dest_items:
+                raise ValueError(f"No destination found for '{location}'.")
+
+            loc_id = dest_items[0].get("id") or dest_items[0].get("dest_id")
+
+            # Step 2: Hotel search via /stays/search
+            search_url = f"https://{config.rapidapi_host}/stays/search"
+            params = {
+                "locationId": loc_id,
+                "checkinDate": check_in,
+                "checkoutDate": check_out,
+                "adults": guests,
+                "rooms": rooms,
+                "currency": currency,
+            }
+            r_search = client.get(search_url, params=params, headers=headers)
+            r_search.raise_for_status()
+            raw_data = r_search.json().get("data", [])
+            raw_hotels = (
+                raw_data
+                if isinstance(raw_data, list)
+                else (raw_data.get("hotels", []) if isinstance(raw_data, dict) else [])
+            )
+
+            for item in raw_hotels[:limit]:
+                name = item.get("name") or item.get("hotel_name", "Unknown Hotel")
+                hotel_id = str(item.get("id") or item.get("hotel_id", ""))
+                rating = item.get("reviewScore") or item.get("review_score")
+                review_count = item.get("reviewCount") or item.get("review_nr")
+                review_word = item.get("reviewScoreWord") or item.get("review_score_word")
+
+                price_info = item.get("priceBreakdown", {}).get("grossPrice", {})
+                price_val = price_info.get("value")
+                price_curr = price_info.get("currency", currency)
+                price_str = price_info.get("amountRounded") or (
+                    f"{price_curr} {float(price_val):.2f}" if price_val is not None else None
+                )
+
+                lat = item.get("latitude")
+                lng = item.get("longitude")
+                photo_urls = item.get("photoUrls", [])
+                photo_url = photo_urls[0] if photo_urls else None
+                country_code = item.get("countryCode")
+                url = build_booking_hotel_url(
+                    name=name,
+                    country_code=country_code,
+                    hotel_id=hotel_id,
+                    check_in=check_in,
+                    check_out=check_out,
+                    guests=guests,
+                    rooms=rooms,
+                )
+
+                badges = []
+                for b in item.get("priceBreakdown", {}).get("benefitBadges", []):
+                    if isinstance(b, dict) and b.get("text"):
+                        badges.append(b["text"])
+                    elif isinstance(b, str):
+                        badges.append(b)
+
+                hotels.append(
+                    Hotel(
+                        name=name,
+                        hotel_id=hotel_id,
+                        rating=float(rating) if rating is not None and rating > 0 else None,
+                        review_count=int(review_count) if review_count is not None and review_count > 0 else None,
+                        review_word=review_word if review_word else None,
+                        price_text=price_str,
+                        total_price=float(price_val) if price_val is not None else None,
+                        currency=price_curr,
+                        address=item.get("wishlistName") or location,
+                        latitude=float(lat) if lat is not None else None,
+                        longitude=float(lng) if lng is not None else None,
+                        url=url,
+                        photo_url=photo_url,
+                        badges=badges,
+                        provider="RapidAPI (booking-com18)",
                         check_in=check_in,
                         check_out=check_out,
                     )
@@ -367,7 +542,16 @@ def search_rapidapi(
 
                 lat = item.get("latitude")
                 lng = item.get("longitude")
-                url = item.get("url") or f"https://www.booking.com/hotel/{hotel_id}.html"
+                country_code = item.get("countryCode") or item.get("country_trans")
+                url = item.get("url") or build_booking_hotel_url(
+                    name=name,
+                    country_code=country_code,
+                    hotel_id=hotel_id,
+                    check_in=check_in,
+                    check_out=check_out,
+                    guests=guests,
+                    rooms=rooms,
+                )
                 address = item.get("address") or item.get("city_trans") or location
 
                 badges = []
@@ -611,6 +795,26 @@ def search_scrape(
     return hotels
 
 
+def apply_genius_discounts(hotels: List[Hotel], genius_level: int) -> None:
+    """Apply Genius loyalty program discounts only to verified Genius properties."""
+    if genius_level <= 0:
+        return
+
+    discount_rate = GENIUS_DISCOUNT_RATES.get(genius_level, 0.20 if genius_level >= 3 else 0.10)
+    for h in hotels:
+        # Strictly apply only if the property is verified as a Genius partner
+        if h.is_genius_deal or "Genius Deal" in h.badges:
+            if h.total_price:
+                g_price = round(h.total_price * (1.0 - discount_rate), 2)
+                h.genius_price = g_price
+                h.genius_discount_rate = discount_rate
+                curr_symbol = "€ " if h.currency == "EUR" else ("$ " if h.currency == "USD" else f"{h.currency} ")
+                h.genius_price_text = f"{curr_symbol}{g_price:.2f}"
+                badge_text = f"Genius L{genius_level} (-{int(discount_rate*100)}%)"
+                if badge_text not in h.badges:
+                    h.badges.append(badge_text)
+
+
 def search_hotels(
     location: str,
     check_in: str,
@@ -620,6 +824,7 @@ def search_hotels(
     currency: str = DEFAULT_CURRENCY,
     limit: int = 10,
     provider: str = "auto",
+    genius_level: int = DEFAULT_GENIUS_LEVEL,
     config: Optional[BookingConfig] = None,
 ) -> Tuple[List[Hotel], str]:
     """Execute hybrid search using the best available provider."""
@@ -641,6 +846,7 @@ def search_hotels(
                     config=cfg,
                 )
                 if results:
+                    apply_genius_discounts(results, genius_level)
                     return results, f"RapidAPI ({cfg.rapidapi_host})"
             except Exception as e:
                 errors.append(f"RapidAPI failed: {e}")
@@ -661,6 +867,7 @@ def search_hotels(
                     config=cfg,
                 )
                 if results:
+                    apply_genius_discounts(results, genius_level)
                     return results, f"Apify ({cfg.apify_actor})"
             except Exception as e:
                 errors.append(f"Apify failed: {e}")
@@ -680,6 +887,7 @@ def search_hotels(
                 config=cfg,
             )
             if results:
+                apply_genius_discounts(results, genius_level)
                 return results, "Direct Web Scrape"
         except Exception as e:
             errors.append(f"Direct scrape failed: {e}")
@@ -705,9 +913,15 @@ def print_pretty_table(
     check_out: str,
     guests: int,
     provider_name: str,
+    genius_level: int = DEFAULT_GENIUS_LEVEL,
 ) -> None:
+    genius_tag = ""
+    if genius_level > 0:
+        disc_pct = int(GENIUS_DISCOUNT_RATES.get(genius_level, 0.20) * 100)
+        genius_tag = f"\n[bold cyan]✨ Genius Level {genius_level} Active (-{disc_pct}% loyalty discount applied)[/bold cyan]"
+
     table = Table(
-        title=f"🏨 Booking.com Hotels in {location} ({check_in} → {check_out}, {guests} guests)\n[dim]Source: {provider_name}[/dim]",
+        title=f"🏨 Booking.com Hotels in {location} ({check_in} → {check_out}, {guests} guests){genius_tag}\n[dim]Source: {provider_name}[/dim]",
         header_style="bold magenta",
         show_lines=True,
     )
@@ -715,7 +929,7 @@ def print_pretty_table(
     table.add_column("#", justify="center", style="dim", width=4)
     table.add_column("Hotel Name", style="bold white", min_width=25)
     table.add_column("Rating", justify="center", width=12)
-    table.add_column("Price", justify="right", width=15)
+    table.add_column("Price", justify="right", width=16)
     table.add_column("Location / Address", style="dim", min_width=25)
     table.add_column("Amenities / Badges", style="cyan", min_width=18)
 
@@ -738,10 +952,18 @@ def print_pretty_table(
         else:
             rating_str = "[dim]N/A[/dim]"
 
-        # Price formatting
-        price_str = h.price_text or (
-            f"{h.currency} {h.total_price:.2f}" if h.total_price else "[dim]Check site[/dim]"
-        )
+        # Price formatting with Genius tier
+        if h.genius_price_text and h.genius_price is not None:
+            price_str = (
+                f"[dim strikethrough]{h.price_text}[/dim strikethrough]\n"
+                f"[bold green]{h.genius_price_text}[/bold green]\n"
+                f"[dim cyan](Genius L{genius_level})[/dim cyan]"
+            )
+        else:
+            price_str = h.price_text or (
+                f"{h.currency} {h.total_price:.2f}" if h.total_price else "[dim]Check site[/dim]"
+            )
+            price_str = f"[bold yellow]{price_str}[/bold yellow]"
 
         badges_str = ", ".join(h.badges) if h.badges else "[dim]Standard[/dim]"
         address_str = (h.address.get("full") if isinstance(h.address, dict) else h.address) or "[dim]N/A[/dim]"
@@ -754,7 +976,7 @@ def print_pretty_table(
             str(idx),
             name_text,
             rating_str,
-            f"[bold yellow]{price_str}[/bold yellow]",
+            price_str,
             address_str,
             badges_str,
         )
@@ -769,10 +991,14 @@ def add_lodging_to_wanderlog(
     interactive: bool = True,
 ) -> bool:
     """Add hotel lodging to a Wanderlog trip using the wanderlog CLI."""
+    price_desc = hotel.price_text or "N/A"
+    if hotel.genius_price_text:
+        price_desc = f"{hotel.genius_price_text} (Genius discount applied, retail {hotel.price_text})"
+
     booking_notes = notes or (
         f"Booking.com lodging.\n"
         f"Rating: {hotel.rating or 'N/A'}/10 ({hotel.review_word or ''})\n"
-        f"Price: {hotel.price_text or 'N/A'}\n"
+        f"Price: {price_desc}\n"
         f"URL: {hotel.url or 'N/A'}"
     )
 
@@ -802,7 +1028,7 @@ def add_lodging_to_wanderlog(
                 f"• Trip Key:   [bold green]{trip_key}[/bold green]\n"
                 f"• Property:   [bold]{hotel.name}[/bold]\n"
                 f"• Dates:      {hotel.check_in} → {hotel.check_out}\n"
-                f"• Price:      {hotel.price_text or 'N/A'}\n"
+                f"• Price:      {price_desc}\n"
                 f"• Address:    {hotel.address or 'N/A'}\n\n"
                 f"Execute command: [dim]{' '.join(cmd)}[/dim]",
                 title="Wanderlog Trip Mutation Confirmation",
@@ -884,7 +1110,23 @@ def run_status_check(config: BookingConfig) -> None:
             "Optional: Set BOOKING_SESSION_COOKIE for web access",
         )
 
-    # 4. Wanderlog CLI
+    # 4. Genius Loyalty
+    genius_lvl = int(os.getenv("GENIUS_LEVEL", os.getenv("BOOKING_GENIUS_LEVEL", str(DEFAULT_GENIUS_LEVEL))))
+    if genius_lvl > 0:
+        disc = int(GENIUS_DISCOUNT_RATES.get(genius_lvl, 0.20) * 100)
+        table.add_row(
+            "Genius Loyalty",
+            f"[bold green]Level {genius_lvl}[/bold green]",
+            f"Active: -{disc}% discount applied to searches (GENIUS_LEVEL={genius_lvl})",
+        )
+    else:
+        table.add_row(
+            "Genius Loyalty",
+            "[dim]Disabled[/dim]",
+            "Set GENIUS_LEVEL=3 in .env to apply 20% loyalty discounts",
+        )
+
+    # 5. Wanderlog CLI
     w_avail = subprocess.run(["which", "wanderlog"], capture_output=True).returncode == 0
     if w_avail:
         table.add_row(
@@ -929,6 +1171,13 @@ def main() -> None:
         "--currency",
         default=DEFAULT_CURRENCY,
         help=f"Currency code (default: {DEFAULT_CURRENCY})",
+    )
+    search_p.add_argument(
+        "--genius",
+        type=int,
+        choices=[0, 1, 2, 3],
+        default=DEFAULT_GENIUS_LEVEL,
+        help=f"Genius loyalty discount level (0=none, 1=10%%, 2=15%%, 3=20%%, default: {DEFAULT_GENIUS_LEVEL})",
     )
     search_p.add_argument("--limit", type=int, default=10, help="Max results to display (default: 10)")
     search_p.add_argument(
@@ -994,6 +1243,7 @@ def main() -> None:
                 currency=args.currency,
                 limit=args.limit,
                 provider=args.provider,
+                genius_level=args.genius,
                 config=config,
             )
         except Exception as e:
@@ -1015,6 +1265,7 @@ def main() -> None:
                 "check_out": check_out,
                 "guests": args.guests,
                 "rooms": args.rooms,
+                "genius_level": args.genius,
                 "provider": provider_used,
                 "count": len(hotels),
                 "hotels": [h.to_dict() for h in hotels],
@@ -1028,6 +1279,7 @@ def main() -> None:
                 check_out=check_out,
                 guests=args.guests,
                 provider_name=provider_used,
+                genius_level=args.genius,
             )
 
         # If user passed --add-to-trip, allow choosing a property

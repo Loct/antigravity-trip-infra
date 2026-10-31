@@ -23,6 +23,8 @@ from booking import (
     BookingConfig,
     Hotel,
     add_lodging_to_wanderlog,
+    apply_genius_discounts,
+    build_booking_hotel_url,
     print_pretty_table,
     run_status_check,
     search_apify,
@@ -63,6 +65,7 @@ def test_booking_config_resolution(monkeypatch, tmp_path):
     monkeypatch.setenv("BOOKING_API_KEY", "test-api-key")
     monkeypatch.setenv("APIFY_TOKEN", "test-apify-token")
     monkeypatch.setenv("BOOKING_SESSION_COOKIE", "bkng_sso_session=abc")
+    monkeypatch.setenv("RAPIDAPI_HOST", "booking-com15.p.rapidapi.com")
 
     cfg = BookingConfig()
     assert cfg.api_key == "test-api-key"
@@ -129,6 +132,74 @@ def test_search_rapidapi_mocked():
         assert h.rating == 8.8
         assert h.total_price == 450.0
         assert "Free cancellation" in h.badges
+
+
+def test_search_rapidapi_booking_com18_mocked():
+    mock_dest_resp = MagicMock()
+    mock_dest_resp.json.return_value = {
+        "status": True,
+        "data": [{"id": "base64-location-id", "name": "Rome"}],
+    }
+    mock_dest_resp.raise_for_status = MagicMock()
+
+    mock_hotels_resp = MagicMock()
+    mock_hotels_resp.json.return_value = {
+        "status": True,
+        "data": [
+            {
+                "id": 99999,
+                "name": "Rome Boutique Stay",
+                "reviewScore": 9.1,
+                "reviewCount": 1200,
+                "reviewScoreWord": "Superb",
+                "priceBreakdown": {
+                    "grossPrice": {
+                        "value": 520.0,
+                        "currency": "EUR",
+                        "amountRounded": "€ 520",
+                    },
+                    "benefitBadges": [{"text": "Genius Deal"}, {"text": "Free cancellation"}],
+                },
+                "latitude": 41.9,
+                "longitude": 12.5,
+                "photoUrls": ["https://example.com/rome.jpg"],
+                "wishlistName": "Rome",
+            }
+        ],
+    }
+    mock_hotels_resp.raise_for_status = MagicMock()
+
+    cfg = BookingConfig(
+        api_key="mock-key",
+        rapidapi_host="booking-com18.p.rapidapi.com",
+    )
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.side_effect = [mock_dest_resp, mock_hotels_resp]
+        mock_client_cls.return_value = mock_client
+
+        results = search_rapidapi(
+            location="Rome",
+            check_in="2026-11-01",
+            check_out="2026-11-05",
+            guests=2,
+            rooms=1,
+            currency="EUR",
+            limit=5,
+            config=cfg,
+        )
+
+        assert len(results) == 1
+        h = results[0]
+        assert h.name == "Rome Boutique Stay"
+        assert h.rating == 9.1
+        assert h.total_price == 520.0
+        assert h.currency == "EUR"
+        assert "Genius Deal" in h.badges
+        assert "Free cancellation" in h.badges
+        assert h.provider == "RapidAPI (booking-com18)"
 
 
 def test_search_apify_mocked():
@@ -235,6 +306,64 @@ def test_status_check():
     cfg = BookingConfig(api_key="test-key", apify_token=None, session_cookie=None)
     # Ensure run_status_check executes without errors
     run_status_check(cfg)
+
+
+def test_genius_discount_application():
+    hotels = [
+        Hotel(name="Genius Hotel", hotel_id="101", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=True),
+        Hotel(name="Regular Hotel", hotel_id="102", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=False),
+    ]
+    # Level 3: 20% off only for verified Genius properties
+    apply_genius_discounts(hotels, genius_level=3)
+    assert hotels[0].genius_price == 400.0
+    assert "€ 400.00" in hotels[0].genius_price_text
+    assert hotels[0].genius_discount_rate == 0.20
+    assert "Genius L3 (-20%)" in hotels[0].badges
+
+    # Non-genius property must NOT be discounted
+    assert hotels[1].genius_price is None
+    assert hotels[1].genius_price_text is None
+    assert "Genius L3 (-20%)" not in hotels[1].badges
+
+    # Level 2: 15% off
+    hotels2 = [
+        Hotel(name="Genius Hotel 2", hotel_id="103", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=True)
+    ]
+    apply_genius_discounts(hotels2, genius_level=2)
+    assert hotels2[0].genius_price == 425.0
+
+    # Level 1: 10% off
+    hotels1 = [
+        Hotel(name="Genius Hotel 1", hotel_id="104", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=True)
+    ]
+    apply_genius_discounts(hotels1, genius_level=1)
+    assert hotels1[0].genius_price == 450.0
+
+
+def test_build_booking_hotel_url():
+    # With country code and dates
+    url = build_booking_hotel_url(
+        name="Tam Coc Peaceful Nature",
+        country_code="vn",
+        check_in="2027-01-27",
+        check_out="2027-01-29",
+        guests=2,
+        rooms=1,
+    )
+    assert "https://www.booking.com/hotel/vn/tam-coc-peaceful-nature.html" in url
+    assert "checkin=2027-01-27" in url
+    assert "checkout=2027-01-29" in url
+    assert "group_adults=2" in url
+
+    # Without country code fallback to search
+    url_fallback = build_booking_hotel_url(
+        name="Grand Hotel",
+        country_code=None,
+        check_in="2027-01-27",
+        check_out="2027-01-29",
+    )
+    assert "https://www.booking.com/searchresults.html" in url_fallback
+    assert "ss=Grand+Hotel" in url_fallback
 
 
 if __name__ == "__main__":

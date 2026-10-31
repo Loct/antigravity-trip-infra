@@ -67,6 +67,13 @@ uv run scripts/booking.py search \
   --limit 10
 ```
 
+### Genius Loyalty Discounts
+```bash
+# By default, GENIUS_LEVEL=3 applies 20% loyalty discounts to eligible properties.
+# Specify --genius 0 to disable, or --genius [1|2|3] to override tier:
+uv run scripts/booking.py search -l "Barcelona" --genius 3
+```
+
 ### Filtering by Rating
 ```bash
 # Only show properties with review score >= 8.5
@@ -77,6 +84,11 @@ uv run scripts/booking.py search -l "Paris" --min-rating 8.5
 ```bash
 uv run scripts/booking.py search -l "Rome" -f json
 ```
+
+### Direct Verified Property Links
+Search outputs include canonical direct URLs for each property:
+- Formatted as `https://www.booking.com/hotel/{country_code}/{slug}.html?checkin={check_in}&checkout={check_out}&group_adults={guests}&no_rooms={rooms}`
+- Includes date and guest parameters so users landing on Booking.com see accurate live rates with Genius discounts.
 
 ---
 
