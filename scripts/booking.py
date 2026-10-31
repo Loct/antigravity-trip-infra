@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -78,6 +79,35 @@ class Hotel:
 
     def to_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
+
+
+def build_booking_hotel_url(
+    name: str,
+    country_code: Optional[str] = None,
+    hotel_id: Optional[str] = None,
+    check_in: Optional[str] = None,
+    check_out: Optional[str] = None,
+    guests: int = 2,
+    rooms: int = 1,
+) -> str:
+    """Build a valid Booking.com property URL or deep search link."""
+    params: Dict[str, str] = {}
+    if check_in and check_out:
+        params["checkin"] = check_in
+        params["checkout"] = check_out
+        params["group_adults"] = str(guests)
+        params["no_rooms"] = str(rooms)
+
+    if country_code and name:
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-")
+        base = f"https://www.booking.com/hotel/{country_code.lower()}/{slug}.html"
+    else:
+        base = "https://www.booking.com/searchresults.html"
+        params["ss"] = name
+
+    if params:
+        return f"{base}?{urllib.parse.urlencode(params)}"
+    return base
 
 
 class BookingConfig:
@@ -339,7 +369,16 @@ def search_rapidapi(
                 lat = prop.get("latitude")
                 lng = prop.get("longitude")
                 photo_url = prop.get("photoUrls", [None])[0] if prop.get("photoUrls") else None
-                url = f"https://www.booking.com/hotel/{hotel_id}.html"
+                country_code = prop.get("countryCode")
+                url = build_booking_hotel_url(
+                    name=name,
+                    country_code=country_code,
+                    hotel_id=hotel_id,
+                    check_in=check_in,
+                    check_out=check_out,
+                    guests=guests,
+                    rooms=rooms,
+                )
 
                 badges = []
                 if prop.get("isBeachFront"):
@@ -419,7 +458,16 @@ def search_rapidapi(
                 lng = item.get("longitude")
                 photo_urls = item.get("photoUrls", [])
                 photo_url = photo_urls[0] if photo_urls else None
-                url = f"https://www.booking.com/hotel/{hotel_id}.html"
+                country_code = item.get("countryCode")
+                url = build_booking_hotel_url(
+                    name=name,
+                    country_code=country_code,
+                    hotel_id=hotel_id,
+                    check_in=check_in,
+                    check_out=check_out,
+                    guests=guests,
+                    rooms=rooms,
+                )
 
                 badges = []
                 for b in item.get("priceBreakdown", {}).get("benefitBadges", []):
@@ -494,7 +542,16 @@ def search_rapidapi(
 
                 lat = item.get("latitude")
                 lng = item.get("longitude")
-                url = item.get("url") or f"https://www.booking.com/hotel/{hotel_id}.html"
+                country_code = item.get("countryCode") or item.get("country_trans")
+                url = item.get("url") or build_booking_hotel_url(
+                    name=name,
+                    country_code=country_code,
+                    hotel_id=hotel_id,
+                    check_in=check_in,
+                    check_out=check_out,
+                    guests=guests,
+                    rooms=rooms,
+                )
                 address = item.get("address") or item.get("city_trans") or location
 
                 badges = []
@@ -1120,7 +1177,7 @@ def main() -> None:
         type=int,
         choices=[0, 1, 2, 3],
         default=DEFAULT_GENIUS_LEVEL,
-        help=f"Genius loyalty discount level (0=none, 1=10%, 2=15%, 3=20%, default: {DEFAULT_GENIUS_LEVEL})",
+        help=f"Genius loyalty discount level (0=none, 1=10%%, 2=15%%, 3=20%%, default: {DEFAULT_GENIUS_LEVEL})",
     )
     search_p.add_argument("--limit", type=int, default=10, help="Max results to display (default: 10)")
     search_p.add_argument(

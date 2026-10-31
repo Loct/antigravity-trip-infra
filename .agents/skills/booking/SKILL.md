@@ -85,6 +85,11 @@ uv run scripts/booking.py search -l "Paris" --min-rating 8.5
 uv run scripts/booking.py search -l "Rome" -f json
 ```
 
+### Direct Verified Property Links
+Search outputs include canonical direct URLs for each property:
+- Formatted as `https://www.booking.com/hotel/{country_code}/{slug}.html?checkin={check_in}&checkout={check_out}&group_adults={guests}&no_rooms={rooms}`
+- Includes date and guest parameters so users landing on Booking.com see accurate live rates with Genius discounts.
+
 ---
 
 ## 4. Adding Accommodations to Wanderlog Trips

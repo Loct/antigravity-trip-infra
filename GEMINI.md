@@ -8,6 +8,10 @@
   3. Push the feature branch to remote origin (`git push -u origin <branch>`).
   4. Open a Pull Request using `gh pr create` for user review and merging.
 
+## Hotel & Lodging Search & Booking Policies
+- **Always Use Workspace CLIs**: When searching, comparing, pricing, or looking up accommodations/hotels/lodging, Antigravity MUST ALWAYS execute the workspace lodging scripts (`uv run scripts/booking.py` and `uv run scripts/agoda.py`) rather than relying on generic public web searches or external guesses. The user has active account credentials, session cookies, and Genius Level loyalty discounts configured in the workspace CLI.
+- **Valid Direct URLs Required**: When returning or displaying Booking.com properties, NEVER generate broken placeholder URLs (e.g. `booking.com/hotel/<id>.html`). Always ensure valid URLs are constructed using the canonical country code and property slug (`https://www.booking.com/hotel/{country_code}/{slug}.html`) with travel dates and guest counts pre-populated, or the search/deeplink format (`https://www.booking.com/searchresults.html?ss={hotel_name}&checkin={checkin}&checkout={checkout}&group_adults={guests}&no_rooms={rooms}`).
+
 ## Self-Update Disambiguation & Procedure
 - **Workspace Script Priority**: When the user requests "self update", "run self update", or "update yourself", ALWAYS execute the workspace updater script (`/workspace/scripts/self_update.sh`). NEVER run `agy update` directly in isolation.
 - **Branch Awareness**:

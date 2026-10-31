@@ -24,6 +24,7 @@ from booking import (
     Hotel,
     add_lodging_to_wanderlog,
     apply_genius_discounts,
+    build_booking_hotel_url,
     print_pretty_table,
     run_status_check,
     search_apify,
@@ -337,6 +338,32 @@ def test_genius_discount_application():
     ]
     apply_genius_discounts(hotels1, genius_level=1)
     assert hotels1[0].genius_price == 450.0
+
+
+def test_build_booking_hotel_url():
+    # With country code and dates
+    url = build_booking_hotel_url(
+        name="Tam Coc Peaceful Nature",
+        country_code="vn",
+        check_in="2027-01-27",
+        check_out="2027-01-29",
+        guests=2,
+        rooms=1,
+    )
+    assert "https://www.booking.com/hotel/vn/tam-coc-peaceful-nature.html" in url
+    assert "checkin=2027-01-27" in url
+    assert "checkout=2027-01-29" in url
+    assert "group_adults=2" in url
+
+    # Without country code fallback to search
+    url_fallback = build_booking_hotel_url(
+        name="Grand Hotel",
+        country_code=None,
+        check_in="2027-01-27",
+        check_out="2027-01-29",
+    )
+    assert "https://www.booking.com/searchresults.html" in url_fallback
+    assert "ss=Grand+Hotel" in url_fallback
 
 
 if __name__ == "__main__":
