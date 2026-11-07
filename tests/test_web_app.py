@@ -5,6 +5,7 @@
 #     "pytest>=8.0.0",
 # ]
 # ///
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -35,17 +36,17 @@ def test_clean_ansi_plain_text():
     assert clean_ansi(text) == text
 
 
-async def test_handle_status_unconfigured():
+def test_handle_status_unconfigured():
     """Verify status report when credentials are not configured."""
     with patch.dict(os.environ, {}, clear=True):
-        status = await handle_status()
+        status = asyncio.run(handle_status())
         assert "System & Authentication Status" in status
         assert "Wanderlog" in status
         assert "Booking.com" in status
         assert "Antigravity CLI" in status
 
 
-async def test_handle_status_configured():
+def test_handle_status_configured():
     """Verify status report shows checkmarks when credentials are present."""
     mock_env = {
         "WANDERLOG_AUTH_SESSION_COOKIE": "test_cookie",
@@ -55,7 +56,7 @@ async def test_handle_status_configured():
         "GH_TOKEN": "ghp_test",
     }
     with patch.dict(os.environ, mock_env):
-        status = await handle_status()
+        status = asyncio.run(handle_status())
         assert "✅ **Wanderlog**: Authenticated" in status
         assert "✅ **Booking.com**: Authenticated" in status
         assert "✅ **Anthropic Claude**: API key active" in status
@@ -64,10 +65,8 @@ async def test_handle_status_configured():
 
 
 if __name__ == "__main__":
-    import asyncio
     test_clean_ansi()
     test_clean_ansi_plain_text()
-    asyncio.run(test_handle_status_unconfigured())
-    asyncio.run(test_handle_status_configured())
+    test_handle_status_unconfigured()
+    test_handle_status_configured()
     print("All web_app tests passed successfully!")
-
