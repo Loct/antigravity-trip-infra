@@ -1,45 +1,33 @@
 ---
 name: booking
-description: Search and compare hotel and lodging accommodations via Booking.com (using RapidAPI, Apify scraper actor, or session cookies) and add selected stays to Wanderlog trip itineraries.
+description: Search and compare hotel and lodging accommodations via Booking.com using authenticated session cookies (BOOKING_SESSION_COOKIE) and add selected stays to Wanderlog trip itineraries.
 ---
 
 # Booking.com Lodging Search & Wanderlog Integration Skill
 
-This skill guides Antigravity on searching, filtering, and comparing hotel and lodging accommodations using Booking.com, and linking selected stays to Wanderlog trip itineraries.
+This skill guides Antigravity on searching, filtering, and comparing hotel and lodging accommodations using Booking.com via authenticated session cookies, and linking selected stays to Wanderlog trip itineraries.
 
 ---
 
-## 1. Architecture & Provider Modes
+## 1. Architecture & Authentication
 
-The integration script (`scripts/booking.py`) uses a **hybrid multi-provider strategy**:
+The integration script (`scripts/booking.py`) operates via **browser session cookie authentication**:
 
-1. **RapidAPI / Booking.com REST API** (`rapidapi` mode):
-   - Fast, structured hotel search and location lookup.
-   - Configured via `BOOKING_API_KEY` or `RAPIDAPI_KEY`.
-   - Default host: `booking-com15.p.rapidapi.com` (customizable via `RAPIDAPI_HOST`).
-
-2. **Apify Booking Scraper** (`apify` mode):
-   - Uses residential proxies and cloud actors (`voyager/booking-scraper` or `apify/booking-scraper`).
-   - Reliable fallback when direct access is blocked.
-   - Configured via `APIFY_TOKEN`.
-
-3. **Direct Web Search & Session Cookies** (`scrape` mode):
-   - Direct web queries using `BOOKING_SESSION_COOKIE` (`bkng_sso_session`).
-
-4. **Auto Hybrid Mode** (`auto`, default):
-   - Attempts RapidAPI first, then Apify, then direct scrape.
+- **Cookie Session Mode**: Direct web requests using the user's active `BOOKING_SESSION_COOKIE` (`bkng_sso_session`).
+- Provides real user session continuity, accurate rates, and Genius loyalty program tier discounts.
+- Persisted in `.env` (`BOOKING_SESSION_COOKIE`) and `/root/.config/booking/credentials.json`.
 
 ---
 
 ## 2. Checking Status & Credentials
 
-Check the current status of all Booking.com providers and Wanderlog CLI:
+Check the current status of the Booking.com session cookie and Wanderlog CLI:
 
 ```bash
 uv run scripts/booking.py status
 ```
 
-To configure or update credentials, use the interactive wizard:
+To configure or update your session cookie, run the setup wizard:
 ```bash
 ./scripts/login_booking.sh
 ```

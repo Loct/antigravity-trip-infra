@@ -42,7 +42,7 @@ Allows you to manage, create, and organize [Wanderlog](https://wanderlog.com) tr
 - 🌍 **Full Trip Management**: Create, list, copy, and delete trips.
 - 📍 **Place & Itinerary Building**: Add attractions, restaurants, and sights with coordinates, addresses, and scheduled visit times.
 - ✈️ **Travel Reservations**: Add and manage flights, hotels, and train journeys.
-- 🏨 **Booking.com Lodging Search & Integration**: Search, filter, and compare hotel and lodging accommodations via Booking.com (RapidAPI, Apify residential proxy scraper, or web fallback) and link selected stays directly to Wanderlog trips using `uv run scripts/booking.py`.
+- 🏨 **Booking.com Lodging Search & Integration**: Search, filter, and compare hotel and lodging accommodations via Booking.com using authenticated browser session cookies (`BOOKING_SESSION_COOKIE`) and link selected stays directly to Wanderlog trips using `uv run scripts/booking.py`.
 - 🏮 **Agoda Lodging Search & Integration**: Search, filter, and compare hotel room rates and properties via Agoda (RapidAPI, Apify scraper actor, or direct web search) and link selected stays directly to Wanderlog trips using `uv run scripts/agoda.py`.
 - 🧠 **DeepSeek Itinerary Validator (Free OpenRouter Tier)**: Validate and double-check itineraries for scheduling feasibility, geographic backtracking, lodging gaps, and flight buffers using DeepSeek (DeepSeek-R1 / DeepSeek-Chat) via free OpenRouter or custom providers (`uv run scripts/deepseek_validator.py`).
 - 🎭 **Claude Itinerary Validator & Multi-Model Cross-Checking**: Audit itineraries using Anthropic Claude (Claude 3.7 Sonnet with extended thinking, Claude 3.5 Sonnet, Claude 3.5 Haiku) via `uv run scripts/claude_validator.py` and run simultaneous **Dual AI Cross-Checks** comparing Claude and DeepSeek consensus via `uv run scripts/cross_check_validator.py`.
@@ -100,11 +100,9 @@ Run the unified login wizard to authenticate all services in sequence:
   ./scripts/login_booking.sh
   ```
   Provides options to configure:
-  1. RapidAPI / Booking.com API Key for fast structured hotel search and rates.
-  2. Apify Personal API Token for reliable residential-proxy scraper fallback (`voyager/booking-scraper`).
-  3. Browser session cookie (`bkng_sso_session` / `bkng`) for account access.
-  4. Integration and credentials status verification.
-  5. Test hotel search.
+  1. Browser session cookie (`bkng_sso_session` / `bkng`) for authenticated session access.
+  2. Integration and credentials status verification.
+  3. Test hotel search.
 
 - **Agoda Setup**:
   ```bash
@@ -283,7 +281,7 @@ docker compose exec antigravity-wanderlog wanderlog trips show <trip-id> --detai
 
 ## Booking.com Lodging Search & Wanderlog Integration
 
-The workspace includes a high-performance, uv-powered Booking.com integration CLI (`scripts/booking.py`) and agent skill (`.agents/skills/booking/SKILL.md`). It supports hybrid querying via RapidAPI (structured REST API), Apify cloud scraper actor (`voyager/booking-scraper`), or direct session cookies.
+The workspace includes a high-performance, uv-powered Booking.com integration CLI (`scripts/booking.py`) and agent skill (`.agents/skills/booking/SKILL.md`). It operates via authenticated browser session cookies (`BOOKING_SESSION_COOKIE`), applying real account rates and Genius loyalty discounts.
 
 ### Commands:
 

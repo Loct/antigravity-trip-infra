@@ -48,7 +48,7 @@ When adding support or authenticating a new platform (e.g., Booking.com, Airbnb,
 
 1. **Identify Required Auth Type**:
    - **Cookie-based**: Requires browser session cookie. Document the cookie key (e.g., `bkng_sso_session` for Booking.com).
-   - **API Key-based**: Requires developer/affiliate API key (e.g., `BOOKING_API_KEY` or `RAPIDAPI_KEY`).
+   - **API Key-based**: Requires developer/affiliate API key (e.g., `AGODA_API_KEY` or `RAPIDAPI_KEY`).
    - **OAuth / Device Code**: Requires CLI tool with device authorization grant.
 
 2. **Standard Configuration Locations**:
