@@ -27,3 +27,4 @@ default_theme = "dark"
 layout = "wide"
 # Whether to show the readme at startup
 show_readme_at_startup = false
+
