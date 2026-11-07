@@ -24,10 +24,8 @@ from __future__ import annotations
 
 import asyncio
 import os
-import pty
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -59,6 +57,11 @@ def clean_ansi(text: str) -> str:
 AUTH_PASSWORD = os.getenv("WEB_AUTH_PASSWORD", "").strip()
 
 if cl is not None and AUTH_PASSWORD:
+    if not os.getenv("CHAINLIT_AUTH_SECRET"):
+        import secrets
+
+        os.environ["CHAINLIT_AUTH_SECRET"] = secrets.token_hex(32)
+
     @cl.password_auth_callback
     def authenticate(username: str, password: str) -> Optional[cl.User]:
         """Authenticate user against the shared WEB_AUTH_PASSWORD."""
@@ -71,6 +74,7 @@ if cl is not None and AUTH_PASSWORD:
 # Starters: Suggested quick actions shown on new conversation
 # ----------------------------------------------------------------------
 if cl is not None:
+
     @cl.set_starters
     async def set_starters() -> List[cl.Starter]:
         return [
@@ -96,7 +100,6 @@ if cl is not None:
             ),
         ]
 
-
     # ----------------------------------------------------------------------
     # Session Lifecycle: Startup & Resume
     # ----------------------------------------------------------------------
@@ -104,7 +107,7 @@ if cl is not None:
     async def on_chat_start() -> None:
         """Initialize session state and display welcome overview."""
         cl.user_session.set("history", [])
-        
+
         welcome_text = """### 🌍 Welcome to Wanderlog & Antigravity Web Gateway!
 
 This interface lets you collaborate on travel planning with:
@@ -116,7 +119,6 @@ This interface lets you collaborate on travel planning with:
 💡 *Type `/help` to see quick slash commands, or start asking questions below!*
 """
         await cl.Message(content=welcome_text).send()
-
 
     @cl.on_chat_resume
     async def on_chat_resume(thread: Dict[str, Any]) -> None:
@@ -130,7 +132,7 @@ This interface lets you collaborate on travel planning with:
 async def handle_status() -> str:
     """Check authentication and connectivity for all services."""
     lines = ["### 🔍 System & Authentication Status\n"]
-    
+
     # 1. Wanderlog Status
     wanderlog_cookie = os.getenv("WANDERLOG_AUTH_SESSION_COOKIE", "")
     cred_file = Path.home() / ".config" / "wanderlog" / "credentials.json"
@@ -138,13 +140,13 @@ async def handle_status() -> str:
         lines.append("- ✅ **Wanderlog**: Authenticated via session cookie")
     else:
         lines.append("- ⚠️ **Wanderlog**: Not configured (set `WANDERLOG_AUTH_SESSION_COOKIE`)")
-        
+
     # 2. Antigravity CLI (agy)
     if shutil.which("agy"):
         lines.append("- ✅ **Antigravity CLI (`agy`)**: Installed & ready")
     else:
         lines.append("- ⚠️ **Antigravity CLI (`agy`)**: Binary not found in PATH")
-        
+
     # 3. Booking.com
     bkng_cookie = os.getenv("BOOKING_SESSION_COOKIE", "")
     if bkng_cookie:
@@ -179,7 +181,9 @@ async def handle_trips_list() -> str:
         step.output = "Running `wanderlog trips list`..."
         try:
             proc = await asyncio.create_subprocess_exec(
-                "wanderlog", "trips", "list",
+                "wanderlog",
+                "trips",
+                "list",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -202,7 +206,7 @@ async def handle_booking_search(args: str) -> str:
     parts = args.strip().split()
     if not parts:
         return "⚠️ **Usage**: `/hotel <city> [checkin] [checkout]` (e.g. `/hotel Tokyo 2026-04-01 2026-04-05`)"
-    
+
     city = parts[0]
     checkin = parts[1] if len(parts) > 1 else None
     checkout = parts[2] if len(parts) > 2 else None
@@ -258,7 +262,7 @@ async def handle_council_query(query: str) -> str:
                 return output
             else:
                 err = clean_ansi(stderr.decode().strip() if stderr else "Council failed")
-                step.output = f"Deliberation error"
+                step.output = "Deliberation error"
                 return f"⚠️ **AI Council Error**:\n```text\n{err or output}\n```"
         except Exception as e:
             step.output = str(e)
@@ -291,14 +295,14 @@ async def run_agy_agent(user_prompt: str) -> None:
         try:
             # Run agy with permissive permissions
             cmd = ["agy", "--dangerously-skip-permissions", user_prompt]
-            
+
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=str(WORKSPACE_DIR),
             )
-            
+
             buffer = ""
             while True:
                 line = await proc.stdout.readline()
@@ -308,7 +312,7 @@ async def run_agy_agent(user_prompt: str) -> None:
                 buffer += decoded
                 # Stream updates periodically
                 await msg.stream_token(decoded)
-            
+
             await proc.wait()
             step.output = f"Completed with status {proc.returncode}"
             await msg.update()
@@ -323,6 +327,7 @@ async def run_agy_agent(user_prompt: str) -> None:
 # Main Incoming Message Router
 # ----------------------------------------------------------------------
 if cl is not None:
+
     @cl.on_message
     async def on_message(message: cl.Message) -> None:
         """Handle incoming message from user."""

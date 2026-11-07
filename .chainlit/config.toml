@@ -1,3 +1,6 @@
+[meta]
+generated_by = "2.12.0"
+
 [project]
 # Whether to enable telemetry
 enable_telemetry = false
@@ -27,4 +30,3 @@ default_theme = "dark"
 layout = "wide"
 # Whether to show the readme at startup
 show_readme_at_startup = false
-
