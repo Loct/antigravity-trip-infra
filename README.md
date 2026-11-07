@@ -48,6 +48,7 @@ Allows you to manage, create, and organize [Wanderlog](https://wanderlog.com) tr
 - 🎭 **Claude Itinerary Validator & Multi-Model Cross-Checking**: Audit itineraries using Anthropic Claude (Claude 3.7 Sonnet with extended thinking, Claude 3.5 Sonnet, Claude 3.5 Haiku) via `uv run scripts/claude_validator.py` and run simultaneous **Dual AI Cross-Checks** comparing Claude and DeepSeek consensus via `uv run scripts/cross_check_validator.py`.
 - 🤖 **Native Antigravity MCP Server**: The `wanderlog` CLI acts as an MCP server (`wanderlog mcp --enable-write`), giving Antigravity first-class tools for trip operations.
 - 🐙 **Git & GitHub CLI Integration**: Full `git` and `gh` CLI capabilities preinstalled with persistent credentials (`github_data`, `git_data`, `ssh_data`) and Git credential helper setup.
+- 📱 **Mobile & Web Frontend (Chainlit)**: Touch-friendly, responsive chat UI with multi-session history, shareable chat threads, and collapsible tool execution cards. Allows friends and collaborators to plan trips together from any phone or browser on port 8000.
 - 🐍 **Python & uv Environment**: Modern, high-performance Python runtime managed by `uv` with Python 3.12 preinstalled for fast dependency management and script execution.
 - 🔗 **Remote Control**: Connects seamlessly with the Antigravity Desktop app or web portal without needing manual SSH or open inbound ports.
 - 💾 **State Persistence**: Docker volumes persist Antigravity session history (`gemini_data`), Wanderlog credentials (`wanderlog_data`), and GitHub/Git configuration (`github_data`, `git_data`, `ssh_data`).
@@ -178,6 +179,31 @@ docker compose exec antigravity-wanderlog agy
 ```
 
 Press `Ctrl+D` twice or type `/exit` to exit the session.
+
+### Option C: Mobile & Web Frontend (Chainlit - Shareable with Others)
+
+The container includes a pre-built, responsive mobile web frontend powered by **Chainlit** running on port **8000**. This allows you and your friends or travel companions to plan trips together without needing Google Antigravity accounts or SSH terminal access.
+
+1. **Accessing the Web App**:
+   - Open `http://localhost:8000` (or `http://<server-ip>:8000`) on your computer, tablet, or smartphone.
+   - On smartphones, tap the hamburger menu in the top-left to slide open the **multi-session sidebar**.
+
+2. **Key Capabilities**:
+   - 📱 **Multi-Session Support**: All trip planning sessions appear in the left drawer. You can start new sessions, resume previous conversations, and switch between trips effortlessly.
+   - 🔗 **Shareable Sessions**: Share specific thread links with friends so they can view and collaborate on the same itinerary.
+   - ⚡ **Slash Commands & Fast Tools**:
+     - `/trips` - List all current Wanderlog trips and stops.
+     - `/hotel <city> [checkin] [checkout]` - Search Booking.com with Genius Level 3 discounts and direct links.
+     - `/agoda <city> [checkin] [checkout]` - Search Agoda lodging.
+     - `/council <question>` - Consult Anthropic Claude & DeepSeek for mutual peer review on pacing and transit.
+     - `/status` - Check connection status for Wanderlog, Booking, Agoda, and GitHub.
+   - 💬 **Antigravity Agent**: Chat freely with the agent to plan custom day-by-day itineraries, add places, and build travel budgets.
+
+3. **Optional Passcode Protection**:
+   If hosting publicly on the internet, set `WEB_AUTH_PASSWORD` in your `.env` to require a shared password before accessing the chat UI:
+   ```env
+   WEB_AUTH_PASSWORD=YourSecretPassword123
+   ```
 
 ---
 

@@ -283,10 +283,33 @@ if [ "$ENABLE_REMOTE_CONTROL" = "true" ]; then
   fi
 fi
 
-# 6. Execute Command
+# 7. Start Web Frontend (Chainlit)
+ENABLE_WEB_UI="${ENABLE_WEB_UI:-true}"
+WEB_PORT="${WEB_PORT:-8000}"
+
+if [ "$ENABLE_WEB_UI" = "true" ]; then
+  echo "[-] Starting Web UI (Chainlit) daemon on port ${WEB_PORT}..."
+  mkdir -p /workspace/data /root/.gemini/antigravity-cli
+  
+  cd /workspace
+  uv run chainlit run scripts/web_app.py --host 0.0.0.0 --port "${WEB_PORT}" --headless > /root/.gemini/antigravity-cli/web-ui.log 2>&1 &
+  WEB_PID=$!
+  sleep 3
+
+  if kill -0 "$WEB_PID" 2>/dev/null; then
+    echo "[-] Web UI daemon is RUNNING (PID: $WEB_PID) on port ${WEB_PORT}."
+    echo "    Open http://localhost:${WEB_PORT} in your browser or on your phone."
+  else
+    echo "[!] Web UI daemon failed to start. Check logs:"
+    cat /root/.gemini/antigravity-cli/web-ui.log 2>/dev/null || true
+  fi
+fi
+
+# 8. Execute Command
 if [ "$1" = "daemon" ] || [ -z "$1" ]; then
   echo "[-] Container ready. Running in daemon mode."
   echo "    Useful commands:"
+  echo "      - Web Frontend:     http://localhost:${WEB_PORT:-8000}"
   echo "      - Interactive CLI:  docker compose exec antigravity-wanderlog agy"
   echo "      - Wanderlog status: docker compose exec antigravity-wanderlog wanderlog status"
   echo "      - Wanderlog trips:  docker compose exec antigravity-wanderlog wanderlog trips list"
