@@ -27,9 +27,9 @@ from booking import (
     build_booking_hotel_url,
     print_pretty_table,
     run_status_check,
-    search_apify,
+    search_cookie,
     search_hotels,
-    search_rapidapi,
+    search_scrape,
 )
 
 
@@ -50,7 +50,7 @@ def test_hotel_dataclass():
         url="https://booking.com/hotel/12345.html",
         photo_url="https://example.com/photo.jpg",
         badges=["Free cancellation"],
-        provider="RapidAPI",
+        provider="Cookie Session",
         check_in="2026-11-01",
         check_out="2026-11-05",
     )
@@ -62,209 +62,157 @@ def test_hotel_dataclass():
 
 
 def test_booking_config_resolution(monkeypatch, tmp_path):
-    monkeypatch.setenv("BOOKING_API_KEY", "test-api-key")
-    monkeypatch.setenv("APIFY_TOKEN", "test-apify-token")
-    monkeypatch.setenv("BOOKING_SESSION_COOKIE", "bkng_sso_session=abc")
-    monkeypatch.setenv("RAPIDAPI_HOST", "booking-com15.p.rapidapi.com")
+    monkeypatch.setenv("BOOKING_SESSION_COOKIE", "bkng_sso_session=abc123xyz")
 
     cfg = BookingConfig()
-    assert cfg.api_key == "test-api-key"
-    assert cfg.apify_token == "test-apify-token"
-    assert cfg.session_cookie == "bkng_sso_session=abc"
-    assert cfg.rapidapi_host == "booking-com15.p.rapidapi.com"
+    assert cfg.session_cookie == "bkng_sso_session=abc123xyz"
 
 
-def test_search_rapidapi_mocked():
-    mock_dest_resp = MagicMock()
-    mock_dest_resp.json.return_value = {
-        "data": [{"dest_id": "-246227", "search_type": "city", "name": "Tokyo"}]
-    }
-    mock_dest_resp.raise_for_status = MagicMock()
+def test_booking_config_from_credentials_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("BOOKING_SESSION_COOKIE", raising=False)
+    monkeypatch.delenv("BOOKING_COM_COOKIES", raising=False)
+    monkeypatch.delenv("BOOKING_COOKIE", raising=False)
 
-    mock_hotels_resp = MagicMock()
-    mock_hotels_resp.json.return_value = {
-        "data": {
-            "hotels": [
-                {
-                    "hotel_id": 101,
-                    "property": {
-                        "name": "Tokyo Grand Hotel",
-                        "id": 101,
-                        "reviewScore": 8.8,
-                        "reviewCount": 1200,
-                        "reviewScoreWord": "Fabulous",
-                        "priceBreakdown": {
-                            "grossPrice": {"value": 450.0, "currency": "USD"}
-                        },
-                        "latitude": 35.68,
-                        "longitude": 139.75,
-                        "wishlistName": "Minato, Tokyo",
-                        "isFreeCancellation": True,
-                    },
-                }
-            ]
-        }
-    }
-    mock_hotels_resp.raise_for_status = MagicMock()
+    fake_home = tmp_path / "home"
+    booking_dir = fake_home / ".config" / "booking"
+    booking_dir.mkdir(parents=True)
+    creds_file = booking_dir / "credentials.json"
+    creds_file.write_text(json.dumps({"session_cookie": "bkng_sso_session=file_cookie"}), encoding="utf-8")
 
-    cfg = BookingConfig(api_key="mock-key", rapidapi_host="booking-com15.p.rapidapi.com")
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+    cfg = BookingConfig()
+    assert cfg.session_cookie == "bkng_sso_session=file_cookie"
+
+
+MOCK_BOOKING_HTML = """
+<!DOCTYPE html>
+<html>
+<body>
+  <div data-testid="property-card">
+    <a data-testid="title-link" href="/hotel/jp/tokyo-grand-hotel.html">
+      <div data-testid="title">Tokyo Grand Hotel</div>
+    </a>
+    <div data-testid="review-score">8.8 Fabulous</div>
+    <div data-testid="price-and-discounted-price">€ 450.00</div>
+    <div data-testid="address">Minato, Tokyo</div>
+    <div>Genius Deal Available</div>
+  </div>
+  <div data-testid="property-card">
+    <a data-testid="title-link" href="/hotel/jp/shinjuku-residence.html">
+      <div data-testid="title">Shinjuku Residence</div>
+    </a>
+    <div data-testid="review-score">9.1 Superb</div>
+    <div data-testid="price-and-discounted-price">€ 320.00</div>
+    <div data-testid="address">Shinjuku, Tokyo</div>
+  </div>
+</body>
+</html>
+"""
+
+
+def test_search_cookie_mocked():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = MOCK_BOOKING_HTML
+    mock_resp.raise_for_status = MagicMock()
+
+    cfg = BookingConfig(session_cookie="bkng_sso_session=test_cookie")
 
     with patch("httpx.Client") as mock_client_cls:
         mock_client = MagicMock()
         mock_client.__enter__.return_value = mock_client
-        mock_client.get.side_effect = [mock_dest_resp, mock_hotels_resp]
+        mock_client.get.return_value = mock_resp
         mock_client_cls.return_value = mock_client
 
-        results = search_rapidapi(
+        results, provider = search_hotels(
             location="Tokyo",
-            check_in="2026-11-01",
-            check_out="2026-11-05",
-            guests=2,
-            rooms=1,
-            currency="USD",
-            limit=5,
-            config=cfg,
-        )
-
-        assert len(results) == 1
-        h = results[0]
-        assert h.name == "Tokyo Grand Hotel"
-        assert h.rating == 8.8
-        assert h.total_price == 450.0
-        assert "Free cancellation" in h.badges
-
-
-def test_search_rapidapi_booking_com18_mocked():
-    mock_dest_resp = MagicMock()
-    mock_dest_resp.json.return_value = {
-        "status": True,
-        "data": [{"id": "base64-location-id", "name": "Rome"}],
-    }
-    mock_dest_resp.raise_for_status = MagicMock()
-
-    mock_hotels_resp = MagicMock()
-    mock_hotels_resp.json.return_value = {
-        "status": True,
-        "data": [
-            {
-                "id": 99999,
-                "name": "Rome Boutique Stay",
-                "reviewScore": 9.1,
-                "reviewCount": 1200,
-                "reviewScoreWord": "Superb",
-                "priceBreakdown": {
-                    "grossPrice": {
-                        "value": 520.0,
-                        "currency": "EUR",
-                        "amountRounded": "€ 520",
-                    },
-                    "benefitBadges": [{"text": "Genius Deal"}, {"text": "Free cancellation"}],
-                },
-                "latitude": 41.9,
-                "longitude": 12.5,
-                "photoUrls": ["https://example.com/rome.jpg"],
-                "wishlistName": "Rome",
-            }
-        ],
-    }
-    mock_hotels_resp.raise_for_status = MagicMock()
-
-    cfg = BookingConfig(
-        api_key="mock-key",
-        rapidapi_host="booking-com18.p.rapidapi.com",
-    )
-
-    with patch("httpx.Client") as mock_client_cls:
-        mock_client = MagicMock()
-        mock_client.__enter__.return_value = mock_client
-        mock_client.get.side_effect = [mock_dest_resp, mock_hotels_resp]
-        mock_client_cls.return_value = mock_client
-
-        results = search_rapidapi(
-            location="Rome",
             check_in="2026-11-01",
             check_out="2026-11-05",
             guests=2,
             rooms=1,
             currency="EUR",
             limit=5,
+            genius_level=3,
             config=cfg,
         )
 
-        assert len(results) == 1
-        h = results[0]
-        assert h.name == "Rome Boutique Stay"
-        assert h.rating == 9.1
-        assert h.total_price == 520.0
-        assert h.currency == "EUR"
-        assert "Genius Deal" in h.badges
-        assert "Free cancellation" in h.badges
-        assert h.provider == "RapidAPI (booking-com18)"
+        assert len(results) == 2
+        assert provider == "Cookie Session (Booking.com)"
+
+        h1 = results[0]
+        assert h1.name == "Tokyo Grand Hotel"
+        assert h1.rating == 8.8
+        assert h1.total_price == 450.0
+        assert h1.currency == "EUR"
+        assert "Genius Deal" in h1.badges
+        # Genius Level 3 (20% off) applied to verified Genius properties
+        assert h1.genius_price == 360.0
+        assert "Genius L3 (-20%)" in h1.badges
+        assert "https://www.booking.com/hotel/jp/tokyo-grand-hotel.html" in h1.url
+        assert "checkin=2026-11-01" in h1.url
+
+        h2 = results[1]
+        assert h2.name == "Shinjuku Residence"
+        assert h2.rating == 9.1
+        assert h2.total_price == 320.0
+        assert h2.genius_price is None
 
 
-def test_search_apify_mocked():
+def test_search_cookie_missing_cookie():
+    cfg = BookingConfig(session_cookie="")
+    with pytest.raises(ValueError, match="Booking.com session cookie is not configured"):
+        search_hotels(
+            location="Tokyo",
+            check_in="2026-11-01",
+            check_out="2026-11-05",
+            config=cfg,
+        )
+
+
+def test_search_cookie_challenge_error():
     mock_resp = MagicMock()
-    mock_resp.json.return_value = [
-        {
-            "id": "202",
-            "name": "Kyoto Traditional Ryokan",
-            "rating": 9.4,
-            "reviewsCount": 850,
-            "ratingText": "Exceptional",
-            "price": 600.0,
-            "address": "Gion, Kyoto",
-            "lat": 35.0,
-            "lng": 135.77,
-            "url": "https://www.booking.com/hotel/jp/ryokan.html",
-            "freeCancellation": True,
-            "stars": 5,
-        }
-    ]
-    mock_resp.raise_for_status = MagicMock()
+    mock_resp.status_code = 202
+    mock_resp.text = "Challenge required"
 
-    cfg = BookingConfig(apify_token="mock-token", apify_actor="voyager/booking-scraper")
+    cfg = BookingConfig(session_cookie="bkng_sso_session=stale_cookie")
 
     with patch("httpx.Client") as mock_client_cls:
         mock_client = MagicMock()
         mock_client.__enter__.return_value = mock_client
-        mock_client.post.return_value = mock_resp
+        mock_client.get.return_value = mock_resp
         mock_client_cls.return_value = mock_client
 
-        results = search_apify(
-            location="Kyoto",
-            check_in="2026-11-01",
-            check_out="2026-11-05",
-            guests=2,
-            rooms=1,
-            currency="USD",
-            limit=5,
-            config=cfg,
-        )
-
-        assert len(results) == 1
-        h = results[0]
-        assert h.name == "Kyoto Traditional Ryokan"
-        assert h.rating == 9.4
-        assert h.total_price == 600.0
-        assert "Free cancellation" in h.badges
-        assert "5★" in h.badges
+        with pytest.raises(PermissionError, match="session challenge or verification required"):
+            search_hotels(
+                location="Tokyo",
+                check_in="2026-11-01",
+                check_out="2026-11-05",
+                config=cfg,
+            )
 
 
-def test_search_hotels_hybrid_fallback():
-    # Test fallback to Apify when RapidAPI key is absent
-    cfg = BookingConfig(api_key="", apify_token="mock-token")
-    with patch("booking.search_apify") as mock_apify:
-        mock_apify.return_value = [
-            Hotel(name="Fallback Hotel", hotel_id="303", rating=8.5)
-        ]
-        results, provider = search_hotels(
-            location="Paris",
-            check_in="2026-11-01",
-            check_out="2026-11-05",
-            config=cfg,
-        )
-        assert len(results) == 1
-        assert "Apify" in provider
+def test_search_cookie_empty_results():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = "<html><body><div>No hotels</div></body></html>"
+    mock_resp.raise_for_status = MagicMock()
+
+    cfg = BookingConfig(session_cookie="bkng_sso_session=test_cookie")
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        with pytest.raises(ValueError, match="No property cards could be parsed"):
+            search_hotels(
+                location="Nowhere",
+                check_in="2026-11-01",
+                check_out="2026-11-05",
+                config=cfg,
+            )
 
 
 def test_add_lodging_to_wanderlog_cmd():
@@ -303,7 +251,7 @@ def test_default_currency_eur():
 
 
 def test_status_check():
-    cfg = BookingConfig(api_key="test-key", apify_token=None, session_cookie=None)
+    cfg = BookingConfig(session_cookie="test-cookie")
     # Ensure run_status_check executes without errors
     run_status_check(cfg)
 
