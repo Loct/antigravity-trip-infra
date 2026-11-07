@@ -22,11 +22,10 @@ Enables Antigravity and the user to actively converse with Anthropic Claude and 
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
-import os
-from pathlib import Path
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from rich.console import Console
@@ -109,15 +108,17 @@ class CouncilSession:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         turn_num = len(self.turns) + 1
-        self.turns.append({
-            "turn": turn_num,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "query": query,
-            "claude": claude_response,
-            "deepseek": deepseek_response,
-            "synthesis": synthesis,
-            "metadata": metadata or {},
-        })
+        self.turns.append(
+            {
+                "turn": turn_num,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "query": query,
+                "claude": claude_response,
+                "deepseek": deepseek_response,
+                "synthesis": synthesis,
+                "metadata": metadata or {},
+            }
+        )
         self.updated_at = datetime.now(timezone.utc).isoformat()
 
     def get_messages_for_claude(self, new_query: str, include_co_counsel: bool = True) -> List[Dict[str, str]]:
@@ -191,7 +192,10 @@ class CouncilSession:
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                    session = cls(session_id=data.get("session_id", session_id), trip_target=data.get("trip_target"))
+                    session = cls(
+                        session_id=data.get("session_id", session_id),
+                        trip_target=data.get("trip_target"),
+                    )
                     session.created_at = data.get("created_at", session.created_at)
                     session.updated_at = data.get("updated_at", session.updated_at)
                     session.turns = data.get("turns", [])
@@ -215,13 +219,15 @@ class CouncilSession:
                 try:
                     with open(f, "r", encoding="utf-8") as fp:
                         meta = json.load(fp)
-                    sessions.append({
-                        "session_id": meta.get("session_id", f.stem),
-                        "trip_target": meta.get("trip_target", "N/A"),
-                        "turns_count": meta.get("turns_count", len(meta.get("turns", []))),
-                        "updated_at": meta.get("updated_at", ""),
-                        "path": str(f),
-                    })
+                    sessions.append(
+                        {
+                            "session_id": meta.get("session_id", f.stem),
+                            "trip_target": meta.get("trip_target", "N/A"),
+                            "turns_count": meta.get("turns_count", len(meta.get("turns", []))),
+                            "updated_at": meta.get("updated_at", ""),
+                            "path": str(f),
+                        }
+                    )
                 except Exception:
                     continue
         return sessions
@@ -321,7 +327,22 @@ def filter_trip_context(
                     # Filter based on aspect if requested
                     if aspect == "dining":
                         lower_name = (name + " " + note).lower()
-                        if any(kw in lower_name for kw in ("restaurant", "food", "dinner", "lunch", "cafe", "bistro", "eatery", "cuisine", "pho", "bun cha", "coffee")):
+                        if any(
+                            kw in lower_name
+                            for kw in (
+                                "restaurant",
+                                "food",
+                                "dinner",
+                                "lunch",
+                                "cafe",
+                                "bistro",
+                                "eatery",
+                                "cuisine",
+                                "pho",
+                                "bun cha",
+                                "coffee",
+                            )
+                        ):
                             lines.append(f"  - Place: {name} (Address: {addr}){note_str}")
                     else:
                         lines.append(f"  - Place: {name} (Address: {addr}){note_str}")
@@ -330,7 +351,18 @@ def filter_trip_context(
                     note = "".join([op.get("insert", "") for op in text_ops if isinstance(op, dict)]).strip()
                     if aspect == "dining":
                         lower_note = note.lower()
-                        if any(kw in lower_note for kw in ("restaurant", "food", "dinner", "lunch", "cafe", "meal", "eat")):
+                        if any(
+                            kw in lower_note
+                            for kw in (
+                                "restaurant",
+                                "food",
+                                "dinner",
+                                "lunch",
+                                "cafe",
+                                "meal",
+                                "eat",
+                            )
+                        ):
                             lines.append(f"  - Dining Note: {note}")
                     else:
                         lines.append(f"  - Note: {note}")
@@ -504,8 +536,16 @@ def ask_council(
     # Query Claude
     try:
         if stream_progress:
-            with console.status(f"[bold magenta]Consulting Claude ({c_cfg.model})...[/bold magenta]", spinner="dots"):
-                c_resp, c_reason = ask_claude(query, trip_context, history_messages=claude_history, claude_cfg=c_cfg)
+            with console.status(
+                f"[bold magenta]Consulting Claude ({c_cfg.model})...[/bold magenta]",
+                spinner="dots",
+            ):
+                c_resp, c_reason = ask_claude(
+                    query,
+                    trip_context,
+                    history_messages=claude_history,
+                    claude_cfg=c_cfg,
+                )
         else:
             c_resp, c_reason = ask_claude(query, trip_context, history_messages=claude_history, claude_cfg=c_cfg)
         results["claude"]["response"] = c_resp
@@ -519,7 +559,10 @@ def ask_council(
     # Query DeepSeek
     try:
         if stream_progress:
-            with console.status(f"[bold blue]Consulting DeepSeek ({d_cfg.model})...[/bold blue]", spinner="dots"):
+            with console.status(
+                f"[bold blue]Consulting DeepSeek ({d_cfg.model})...[/bold blue]",
+                spinner="dots",
+            ):
                 d_resp, d_reason = ask_deepseek(query, trip_context, history_messages=deepseek_history, ds_cfg=d_cfg)
         else:
             d_resp, d_reason = ask_deepseek(query, trip_context, history_messages=deepseek_history, ds_cfg=d_cfg)
@@ -578,15 +621,24 @@ def cross_check_trip_data(
         "aspect": aspect,
         "target_days": target_days,
         "round_1": {"claude": "", "deepseek": ""},
-        "round_2_cross_examination": {"deepseek_critique_of_claude": "", "claude_critique_of_deepseek": ""},
+        "round_2_cross_examination": {
+            "deepseek_critique_of_claude": "",
+            "claude_critique_of_deepseek": "",
+        },
         "session_id": session.session_id if session else None,
     }
 
     # Round 1: Independent Analysis
     if stream_progress:
-        with console.status("[bold magenta]Round 1: Claude evaluating experiential & cultural data...[/bold magenta]", spinner="dots"):
+        with console.status(
+            "[bold magenta]Round 1: Claude evaluating experiential & cultural data...[/bold magenta]",
+            spinner="dots",
+        ):
             c_r1, _ = ask_claude(initial_prompt, trip_context, claude_cfg=c_cfg)
-        with console.status("[bold blue]Round 1: DeepSeek evaluating transit & routing geometry...[/bold blue]", spinner="dots"):
+        with console.status(
+            "[bold blue]Round 1: DeepSeek evaluating transit & routing geometry...[/bold blue]",
+            spinner="dots",
+        ):
             d_r1, _ = ask_deepseek(initial_prompt, trip_context, ds_cfg=d_cfg)
     else:
         c_r1, _ = ask_claude(initial_prompt, trip_context, claude_cfg=c_cfg)
@@ -615,9 +667,15 @@ def cross_check_trip_data(
     )
 
     if stream_progress:
-        with console.status("[bold blue]Round 2: DeepSeek cross-examining Claude's suggestions...[/bold blue]", spinner="dots"):
+        with console.status(
+            "[bold blue]Round 2: DeepSeek cross-examining Claude's suggestions...[/bold blue]",
+            spinner="dots",
+        ):
             d_r2, _ = ask_deepseek(deepseek_cross_prompt, trip_context, ds_cfg=d_cfg)
-        with console.status("[bold magenta]Round 2: Claude cross-examining DeepSeek's suggestions...[/bold magenta]", spinner="dots"):
+        with console.status(
+            "[bold magenta]Round 2: Claude cross-examining DeepSeek's suggestions...[/bold magenta]",
+            spinner="dots",
+        ):
             c_r2, _ = ask_claude(claude_cross_prompt, trip_context, claude_cfg=c_cfg)
     else:
         d_r2, _ = ask_deepseek(deepseek_cross_prompt, trip_context, ds_cfg=d_cfg)
@@ -631,7 +689,11 @@ def cross_check_trip_data(
             query=f"Cross-check itinerary data ({aspect}, {day_label})",
             claude_response=f"Round 1:\n{c_r1}\n\nRound 2 Critique of DeepSeek:\n{c_r2}",
             deepseek_response=f"Round 1:\n{d_r1}\n\nRound 2 Critique of Claude:\n{d_r2}",
-            metadata={"mode": "cross_check", "aspect": aspect, "target_days": target_days},
+            metadata={
+                "mode": "cross_check",
+                "aspect": aspect,
+                "target_days": target_days,
+            },
         )
         session.save()
 
@@ -656,13 +718,35 @@ def debate_council(
 
     # Round 1: Opening Arguments
     if stream_progress:
-        with console.status("[bold magenta]Debate Round 1: Claude presenting experiential argument...[/bold magenta]", spinner="dots"):
-            c_r1, _ = ask_claude(f"Present your recommendation on this travel debate: {topic}", trip_context, claude_cfg=c_cfg)
-        with console.status("[bold blue]Debate Round 1: DeepSeek presenting logistical argument...[/bold blue]", spinner="dots"):
-            d_r1, _ = ask_deepseek(f"Present your recommendation on this travel debate: {topic}", trip_context, ds_cfg=d_cfg)
+        with console.status(
+            "[bold magenta]Debate Round 1: Claude presenting experiential argument...[/bold magenta]",
+            spinner="dots",
+        ):
+            c_r1, _ = ask_claude(
+                f"Present your recommendation on this travel debate: {topic}",
+                trip_context,
+                claude_cfg=c_cfg,
+            )
+        with console.status(
+            "[bold blue]Debate Round 1: DeepSeek presenting logistical argument...[/bold blue]",
+            spinner="dots",
+        ):
+            d_r1, _ = ask_deepseek(
+                f"Present your recommendation on this travel debate: {topic}",
+                trip_context,
+                ds_cfg=d_cfg,
+            )
     else:
-        c_r1, _ = ask_claude(f"Present your recommendation on this travel debate: {topic}", trip_context, claude_cfg=c_cfg)
-        d_r1, _ = ask_deepseek(f"Present your recommendation on this travel debate: {topic}", trip_context, ds_cfg=d_cfg)
+        c_r1, _ = ask_claude(
+            f"Present your recommendation on this travel debate: {topic}",
+            trip_context,
+            claude_cfg=c_cfg,
+        )
+        d_r1, _ = ask_deepseek(
+            f"Present your recommendation on this travel debate: {topic}",
+            trip_context,
+            ds_cfg=d_cfg,
+        )
 
     # Round 2: Direct Rebuttal / Cross-Talk
     d_rebuttal_prompt = (
@@ -677,9 +761,15 @@ def debate_council(
     )
 
     if stream_progress:
-        with console.status("[bold blue]Debate Round 2: DeepSeek responding to Claude...[/bold blue]", spinner="dots"):
+        with console.status(
+            "[bold blue]Debate Round 2: DeepSeek responding to Claude...[/bold blue]",
+            spinner="dots",
+        ):
             d_r2, _ = ask_deepseek(d_rebuttal_prompt, trip_context, ds_cfg=d_cfg)
-        with console.status("[bold magenta]Debate Round 2: Claude responding to DeepSeek...[/bold magenta]", spinner="dots"):
+        with console.status(
+            "[bold magenta]Debate Round 2: Claude responding to DeepSeek...[/bold magenta]",
+            spinner="dots",
+        ):
             c_r2, _ = ask_claude(c_rebuttal_prompt, trip_context, claude_cfg=c_cfg)
     else:
         d_r2, _ = ask_deepseek(d_rebuttal_prompt, trip_context, ds_cfg=d_cfg)
@@ -742,7 +832,7 @@ def format_debate_markdown(results: Dict[str, Any]) -> str:
     r2 = results.get("round_2", {})
 
     lines = [
-        f"### ⚔️ AI Travel Council Debate: *\"{topic}\"*",
+        f'### ⚔️ AI Travel Council Debate: *"{topic}"*',
         "",
         "#### 🎭 Claude's Opening Stance (Culture & Pacing)",
         r1.get("claude", "").strip(),
@@ -768,35 +858,41 @@ def format_debate_markdown(results: Dict[str, Any]) -> str:
 def format_council_markdown(results: Dict[str, Any]) -> str:
     """Format council consultation results into a clean markdown block."""
     lines = [
-        f"### 🏛️ AI Travel Council Consultation",
-        f"**Question:** *\"{results.get('query', '')}\"*",
+        "### 🏛️ AI Travel Council Consultation",
+        f'**Question:** *"{results.get("query", "")}"*',
         "",
     ]
 
     c_info = results.get("claude", {})
     if c_info.get("available"):
-        lines.extend([
-            f"#### 🎭 Anthropic Claude (`{results['models']['claude']}`)",
-            c_info.get("response", "").strip(),
-            "",
-        ])
+        lines.extend(
+            [
+                f"#### 🎭 Anthropic Claude (`{results['models']['claude']}`)",
+                c_info.get("response", "").strip(),
+                "",
+            ]
+        )
     elif "error" in c_info:
         lines.append(f"*Claude consultation unavailable: {c_info['error']}*\n")
 
     d_info = results.get("deepseek", {})
     if d_info.get("available"):
-        lines.extend([
-            f"#### 🧠 DeepSeek (`{results['models']['deepseek']}`)",
-            d_info.get("response", "").strip(),
-            "",
-        ])
+        lines.extend(
+            [
+                f"#### 🧠 DeepSeek (`{results['models']['deepseek']}`)",
+                d_info.get("response", "").strip(),
+                "",
+            ]
+        )
     elif "error" in d_info:
         lines.append(f"*DeepSeek consultation unavailable: {d_info['error']}*\n")
 
-    lines.extend([
-        "---",
-        "💡 *Tip: Discuss these perspectives with Antigravity to adjust your Wanderlog plan.*",
-    ])
+    lines.extend(
+        [
+            "---",
+            "💡 *Tip: Discuss these perspectives with Antigravity to adjust your Wanderlog plan.*",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -961,7 +1057,13 @@ def run_interactive_council(
         except (KeyboardInterrupt, EOFError):
             break
 
-        if not user_input or user_input.lower() in ["exit", "quit", "q", "/exit", "/quit"]:
+        if not user_input or user_input.lower() in [
+            "exit",
+            "quit",
+            "q",
+            "/exit",
+            "/quit",
+        ]:
             console.print("[dim]Exiting Travel Council chat.[/dim]")
             break
 
@@ -1008,7 +1110,9 @@ def run_interactive_council(
         if lower.startswith("/debate"):
             topic = user_input[7:].strip()
             if not topic:
-                console.print("[yellow]Please provide a debate topic (e.g. '/debate Sleeper train vs morning flight')[/yellow]")
+                console.print(
+                    "[yellow]Please provide a debate topic (e.g. '/debate Sleeper train vs morning flight')[/yellow]"
+                )
                 continue
             deb_results = debate_council(
                 topic=topic,
@@ -1142,7 +1246,12 @@ def main() -> None:
         table.add_column("Turns", style="green")
         table.add_column("Last Updated", style="yellow")
         for s in sessions:
-            table.add_row(s["session_id"], s["trip_target"], str(s["turns_count"]), s["updated_at"])
+            table.add_row(
+                s["session_id"],
+                s["trip_target"],
+                str(s["turns_count"]),
+                s["updated_at"],
+            )
         console.print(table)
         sys.exit(0)
 
@@ -1238,10 +1347,10 @@ def main() -> None:
                 "[bold cyan]🏛️ Conversational AI Travel Council[/bold cyan]\n\n"
                 "Converse with Claude & DeepSeek to cross-check data, ask questions, and debate plans.\n\n"
                 "[bold]Commands & Modes:[/bold]\n"
-                "  • Ask a question:     [green]uv run scripts/ai_council.py \"<question>\" --trip <id_or_file>[/green]\n"
+                '  • Ask a question:     [green]uv run scripts/ai_council.py "<question>" --trip <id_or_file>[/green]\n'
                 "  • Cross-check data:   [green]uv run scripts/ai_council.py --trip <id_or_file> --crosscheck [--day <N>] [--aspect dining][/green]\n"
-                "  • Debate dilemma:     [green]uv run scripts/ai_council.py --trip <id_or_file> --debate \"Train vs Flight\"[/green]\n"
-                "  • Multi-turn session: [green]uv run scripts/ai_council.py \"Follow-up question\" --session <session_id>[/green]\n"
+                '  • Debate dilemma:     [green]uv run scripts/ai_council.py --trip <id_or_file> --debate "Train vs Flight"[/green]\n'
+                '  • Multi-turn session: [green]uv run scripts/ai_council.py "Follow-up question" --session <session_id>[/green]\n'
                 "  • Interactive Chat:   [green]uv run scripts/ai_council.py --trip <id_or_file> --interactive[/green]\n"
                 "  • List Sessions:      [green]uv run scripts/ai_council.py --list-sessions[/green]\n",
                 title="AI Travel Council",
@@ -1257,11 +1366,25 @@ def main() -> None:
             session.add_turn(query=query, claude_response=content)
             session.save()
         if args.format == "json":
-            print(json.dumps({"model": claude_cfg.model, "response": content, "reasoning": reasoning}, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "model": claude_cfg.model,
+                        "response": content,
+                        "reasoning": reasoning,
+                    },
+                    indent=2,
+                )
+            )
         elif args.format == "markdown":
             print(content)
         else:
-            console.print(Panel(Markdown(content), title=f"[bold magenta]🎭 Claude ({claude_cfg.model})[/bold magenta]"))
+            console.print(
+                Panel(
+                    Markdown(content),
+                    title=f"[bold magenta]🎭 Claude ({claude_cfg.model})[/bold magenta]",
+                )
+            )
     elif args.ai == "deepseek":
         ds_history = session.get_messages_for_deepseek(query) if session else None
         content, reasoning = ask_deepseek(query, trip_context, history_messages=ds_history, ds_cfg=ds_cfg)
@@ -1269,11 +1392,25 @@ def main() -> None:
             session.add_turn(query=query, deepseek_response=content)
             session.save()
         if args.format == "json":
-            print(json.dumps({"model": ds_cfg.model, "response": content, "reasoning": reasoning}, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "model": ds_cfg.model,
+                        "response": content,
+                        "reasoning": reasoning,
+                    },
+                    indent=2,
+                )
+            )
         elif args.format == "markdown":
             print(content)
         else:
-            console.print(Panel(Markdown(content), title=f"[bold blue]🧠 DeepSeek ({ds_cfg.model})[/bold blue]"))
+            console.print(
+                Panel(
+                    Markdown(content),
+                    title=f"[bold blue]🧠 DeepSeek ({ds_cfg.model})[/bold blue]",
+                )
+            )
     else:  # Council
         results = ask_council(
             query=query,

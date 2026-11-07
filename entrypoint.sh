@@ -31,13 +31,13 @@ auth:
     xsrf_token: "${WANDERLOG_AUTH_SESSION_XSRF_TOKEN:-cookie_auth}"
 EOF
   chmod 600 /root/.config/wanderlog/config.yaml
-  
+
   # Ensure env is available in future interactive shells
   echo "export WANDERLOG_AUTH_SESSION_COOKIE=\"${WANDERLOG_AUTH_SESSION_COOKIE}\"" >> /etc/profile.d/wanderlog.sh
   echo "export WANDERLOG_SESSION=\"${WANDERLOG_AUTH_SESSION_COOKIE}\"" >> /etc/profile.d/wanderlog.sh
   echo "export WANDERLOG_AUTH_SESSION_XSRF_TOKEN=\"${WANDERLOG_AUTH_SESSION_XSRF_TOKEN:-}\"" >> /etc/profile.d/wanderlog.sh
   chmod +x /etc/profile.d/wanderlog.sh
-  
+
   echo "[-] Wanderlog credentials configured successfully."
 else
   if [ -f /root/.config/wanderlog/config.yaml ] || [ -f /root/.config/wanderlog/credentials.json ]; then
@@ -166,6 +166,14 @@ if command -v gh >/dev/null 2>&1; then
   echo "[-] GitHub CLI available: $(gh --version 2>/dev/null | head -n 1 || echo 'gh installed')"
   if gh auth status >/dev/null 2>&1; then
     echo "[-] GitHub CLI authenticated as: $(gh api user --jq .login 2>/dev/null || echo 'authenticated user')"
+  fi
+fi
+
+if command -v pre-commit >/dev/null 2>&1; then
+  echo "[-] Pre-commit hooks available: $(pre-commit --version 2>/dev/null || echo 'pre-commit installed')"
+  if [ -d /workspace/.git ] && [ ! -f /workspace/.git/hooks/pre-commit ]; then
+    echo "[-] Installing git pre-commit hooks..."
+    (cd /workspace && pre-commit install -t pre-commit -t pre-push >/dev/null 2>&1 || true)
   fi
 fi
 

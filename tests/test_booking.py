@@ -9,7 +9,6 @@
 # ]
 # ///
 import json
-import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -25,11 +24,8 @@ from booking import (
     add_lodging_to_wanderlog,
     apply_genius_discounts,
     build_booking_hotel_url,
-    print_pretty_table,
     run_status_check,
-    search_cookie,
     search_hotels,
-    search_scrape,
 )
 
 
@@ -258,8 +254,22 @@ def test_status_check():
 
 def test_genius_discount_application():
     hotels = [
-        Hotel(name="Genius Hotel", hotel_id="101", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=True),
-        Hotel(name="Regular Hotel", hotel_id="102", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=False),
+        Hotel(
+            name="Genius Hotel",
+            hotel_id="101",
+            total_price=500.0,
+            price_text="€ 500.00",
+            currency="EUR",
+            is_genius_deal=True,
+        ),
+        Hotel(
+            name="Regular Hotel",
+            hotel_id="102",
+            total_price=500.0,
+            price_text="€ 500.00",
+            currency="EUR",
+            is_genius_deal=False,
+        ),
     ]
     # Level 3: 20% off only for verified Genius properties
     apply_genius_discounts(hotels, genius_level=3)
@@ -275,14 +285,28 @@ def test_genius_discount_application():
 
     # Level 2: 15% off
     hotels2 = [
-        Hotel(name="Genius Hotel 2", hotel_id="103", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=True)
+        Hotel(
+            name="Genius Hotel 2",
+            hotel_id="103",
+            total_price=500.0,
+            price_text="€ 500.00",
+            currency="EUR",
+            is_genius_deal=True,
+        )
     ]
     apply_genius_discounts(hotels2, genius_level=2)
     assert hotels2[0].genius_price == 425.0
 
     # Level 1: 10% off
     hotels1 = [
-        Hotel(name="Genius Hotel 1", hotel_id="104", total_price=500.0, price_text="€ 500.00", currency="EUR", is_genius_deal=True)
+        Hotel(
+            name="Genius Hotel 1",
+            hotel_id="104",
+            total_price=500.0,
+            price_text="€ 500.00",
+            currency="EUR",
+            is_genius_deal=True,
+        )
     ]
     apply_genius_discounts(hotels1, genius_level=1)
     assert hotels1[0].genius_price == 450.0

@@ -9,24 +9,21 @@
 #     "openai>=1.0.0",
 # ]
 # ///
-import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 # Ensure scripts dir is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import claude_validator
+import deepseek_validator
 from cross_check_validator import (
     extract_section_content,
     extract_verdict,
-    synthesize_cross_check_report,
     run_cross_check,
+    synthesize_cross_check_report,
 )
-import claude_validator
-import deepseek_validator
 
 
 def test_extract_verdict():
@@ -111,9 +108,18 @@ NEEDS RESTRUCTURING
 @patch("cross_check_validator.deepseek_validator.run_validation")
 @patch("cross_check_validator.claude_validator.run_claude_validation")
 def test_run_cross_check_mocked(mock_claude_run, mock_ds_run, mock_fetch):
-    mock_fetch.return_value = ({"title": "Sample Trip", "tripPlan": {"title": "Sample Trip"}}, "Markdown data")
-    mock_ds_run.return_value = ("# DS Report\n## Final Verdict\nEXCELLENT", "DS thought")
-    mock_claude_run.return_value = ("# Claude Report\n## Final Verdict\nEXCELLENT", "Claude thought")
+    mock_fetch.return_value = (
+        {"title": "Sample Trip", "tripPlan": {"title": "Sample Trip"}},
+        "Markdown data",
+    )
+    mock_ds_run.return_value = (
+        "# DS Report\n## Final Verdict\nEXCELLENT",
+        "DS thought",
+    )
+    mock_claude_run.return_value = (
+        "# Claude Report\n## Final Verdict\nEXCELLENT",
+        "Claude thought",
+    )
 
     claude_cfg = claude_validator.ClaudeProviderConfig(api_key="sk-ant-test")
     ds_cfg = deepseek_validator.ProviderConfig(api_key="sk-or-test")

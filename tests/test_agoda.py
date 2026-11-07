@@ -8,8 +8,6 @@
 #     "beautifulsoup4>=4.12.0",
 # ]
 # ///
-import json
-import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -23,7 +21,6 @@ from agoda import (
     AgodaConfig,
     Hotel,
     add_lodging_to_wanderlog,
-    print_pretty_table,
     run_status_check,
     search_apify,
     search_hotels,
@@ -77,9 +74,7 @@ def test_agoda_config_resolution(monkeypatch):
 def test_search_rapidapi_mocked():
     mock_dest_resp = MagicMock()
     mock_dest_resp.status_code = 200
-    mock_dest_resp.json.return_value = {
-        "data": [{"id": "16056", "name": "Tokyo", "dest_id": "16056"}]
-    }
+    mock_dest_resp.json.return_value = {"data": [{"id": "16056", "name": "Tokyo", "dest_id": "16056"}]}
 
     mock_hotels_resp = MagicMock()
     mock_hotels_resp.status_code = 200
@@ -189,9 +184,7 @@ def test_search_apify_mocked():
 def test_search_hotels_hybrid_fallback():
     cfg = AgodaConfig(api_key="", apify_token="mock-token")
     with patch("agoda.search_apify") as mock_apify:
-        mock_apify.return_value = [
-            Hotel(name="Fallback Agoda Hotel", hotel_id="888", rating=8.6)
-        ]
+        mock_apify.return_value = [Hotel(name="Fallback Agoda Hotel", hotel_id="888", rating=8.6)]
         results, provider = search_hotels(
             location="Seoul",
             check_in="2026-11-01",

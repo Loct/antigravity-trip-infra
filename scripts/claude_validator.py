@@ -35,12 +35,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import httpx
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
 console = Console()
 
@@ -78,21 +74,10 @@ class ClaudeProviderConfig:
     ) -> None:
         self.provider = provider or os.getenv("CLAUDE_PROVIDER", "").lower()
         self.api_key = (
-            api_key
-            or os.getenv("ANTHROPIC_API_KEY")
-            or os.getenv("CLAUDE_API_KEY")
-            or os.getenv("OPENROUTER_API_KEY")
+            api_key or os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY") or os.getenv("OPENROUTER_API_KEY")
         )
-        self.base_url = (
-            base_url
-            or os.getenv("ANTHROPIC_BASE_URL")
-            or os.getenv("OPENROUTER_BASE_URL")
-        )
-        self.model = (
-            model
-            or os.getenv("ANTHROPIC_MODEL")
-            or os.getenv("CLAUDE_MODEL")
-        )
+        self.base_url = base_url or os.getenv("ANTHROPIC_BASE_URL") or os.getenv("OPENROUTER_BASE_URL")
+        self.model = model or os.getenv("ANTHROPIC_MODEL") or os.getenv("CLAUDE_MODEL")
 
         # Thinking budget: defaults to 2048 if using thinking-capable model
         env_budget = os.getenv("ANTHROPIC_THINKING_BUDGET")
@@ -123,7 +108,11 @@ class ClaudeProviderConfig:
         elif self.provider == "openrouter":
             self.base_url = self.base_url or "https://openrouter.ai/api/v1"
             # Default to active Claude model on OpenRouter (claude-sonnet-4.5)
-            if not self.model or self.model in ("anthropic/claude-3.7-sonnet", "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022"):
+            if not self.model or self.model in (
+                "anthropic/claude-3.7-sonnet",
+                "claude-3-7-sonnet-20250219",
+                "claude-3-5-sonnet-20241022",
+            ):
                 self.model = "anthropic/claude-sonnet-4.5"
             self.default_headers = {
                 "HTTP-Referer": "https://wanderlog.com",
@@ -138,15 +127,16 @@ class ClaudeProviderConfig:
         if self.provider != "anthropic":
             return False
         model_lower = self.model.lower()
-        return ("3-7" in model_lower or "3.7" in model_lower or "claude-3-7" in model_lower) and self.thinking_budget > 0
+        return (
+            "3-7" in model_lower or "3.7" in model_lower or "claude-3-7" in model_lower
+        ) and self.thinking_budget > 0
 
     def get_anthropic_client(self):
         import anthropic
 
         if not self.api_key:
             raise ValueError(
-                "Missing Anthropic API key. "
-                "Please set ANTHROPIC_API_KEY in .env or run './scripts/login_claude.sh'."
+                "Missing Anthropic API key. Please set ANTHROPIC_API_KEY in .env or run './scripts/login_claude.sh'."
             )
         kwargs: Dict[str, Any] = {"api_key": self.api_key}
         if self.base_url and self.base_url != "https://api.anthropic.com":
@@ -188,7 +178,16 @@ def fetch_trip_data(target: str) -> Tuple[Dict[str, Any], str]:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             proc = subprocess.run(
-                ["wanderlog", "trips", "show", "--file", str(path), "-o", "markdown", "--details"],
+                [
+                    "wanderlog",
+                    "trips",
+                    "show",
+                    "--file",
+                    str(path),
+                    "-o",
+                    "markdown",
+                    "--details",
+                ],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -208,9 +207,7 @@ def fetch_trip_data(target: str) -> Tuple[Dict[str, Any], str]:
         check=False,
     )
     if proc_json.returncode != 0:
-        raise RuntimeError(
-            f"Failed to fetch trip from Wanderlog (ID: {trip_id}): {proc_json.stderr.strip()}"
-        )
+        raise RuntimeError(f"Failed to fetch trip from Wanderlog (ID: {trip_id}): {proc_json.stderr.strip()}")
     data = json.loads(proc_json.stdout)
 
     # 2. Fetch Markdown representation for comprehensive itinerary view
@@ -434,7 +431,10 @@ def run_claude_validation_anthropic(
 
     try:
         if stream:
-            with console.status("[bold green]Claude is analyzing the itinerary...[/bold green]", spinner="dots"):
+            with console.status(
+                "[bold green]Claude is analyzing the itinerary...[/bold green]",
+                spinner="dots",
+            ):
                 pass
 
             console.print("\n[bold cyan]─── Claude Validation Report ───[/bold cyan]\n")
@@ -453,7 +453,9 @@ def run_claude_validation_anthropic(
                             thinking_chunk = getattr(delta, "thinking", "")
                             if thinking_chunk:
                                 if not in_thinking:
-                                    console.print("[dim italic]Reasoning Thought Process (Claude Extended Thinking):[/dim italic]")
+                                    console.print(
+                                        "[dim italic]Reasoning Thought Process (Claude Extended Thinking):[/dim italic]"
+                                    )
                                     in_thinking = True
                                 sys.stdout.write(thinking_chunk)
                                 sys.stdout.flush()
@@ -529,7 +531,10 @@ def run_claude_validation_openrouter(
         )
 
         if stream:
-            with console.status("[bold green]Claude is analyzing the itinerary via OpenRouter...[/bold green]", spinner="dots"):
+            with console.status(
+                "[bold green]Claude is analyzing the itinerary via OpenRouter...[/bold green]",
+                spinner="dots",
+            ):
                 pass
 
             console.print("\n[bold cyan]─── Claude Validation Report ───[/bold cyan]\n")
@@ -581,14 +586,17 @@ def run_claude_validation(
 def verify_connection(provider_cfg: ClaudeProviderConfig) -> bool:
     """Test connection with a quick probe."""
     try:
-        console.print(
-            f"Testing connection to [bold]{provider_cfg.provider}[/bold] ({provider_cfg.model})..."
-        )
+        console.print(f"Testing connection to [bold]{provider_cfg.provider}[/bold] ({provider_cfg.model})...")
         if provider_cfg.provider == "openrouter":
             client = provider_cfg.get_openrouter_client()
             resp = client.chat.completions.create(
                 model=provider_cfg.model,
-                messages=[{"role": "user", "content": "Respond with 'VALIDATOR_READY' if you can read this."}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "Respond with 'VALIDATOR_READY' if you can read this.",
+                    }
+                ],
                 max_tokens=20,
             )
             content = resp.choices[0].message.content or ""
@@ -596,7 +604,12 @@ def verify_connection(provider_cfg: ClaudeProviderConfig) -> bool:
             client = provider_cfg.get_anthropic_client()
             resp = client.messages.create(
                 model=provider_cfg.model,
-                messages=[{"role": "user", "content": "Respond with 'VALIDATOR_READY' if you can read this."}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "Respond with 'VALIDATOR_READY' if you can read this.",
+                    }
+                ],
                 max_tokens=600,
             )
             content = "".join(b.text for b in getattr(resp, "content", []) if getattr(b, "type", "") == "text")
@@ -746,9 +759,7 @@ def main() -> None:
     trip_summary = summarize_trip_context(trip_json, trip_md)
 
     # 3. Run validation
-    report_text, reasoning = run_claude_validation(
-        trip_summary, provider_cfg, stream=(args.format == "rich")
-    )
+    report_text, reasoning = run_claude_validation(trip_summary, provider_cfg, stream=(args.format == "rich"))
 
     # 4. Output formatting
     if args.format == "markdown":

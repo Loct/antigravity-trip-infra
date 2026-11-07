@@ -35,7 +35,6 @@ import httpx
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 console = Console()
 err_console = Console(stderr=True)
@@ -98,9 +97,7 @@ class AgodaConfig:
         else:
             self.apify_token = self._resolve_apify_token()
 
-        self.apify_actor = apify_actor or os.getenv(
-            "APIFY_AGODA_ACTOR", "tri_angle/agoda-scraper"
-        )
+        self.apify_actor = apify_actor or os.getenv("APIFY_AGODA_ACTOR", "tri_angle/agoda-scraper")
 
         if session_cookie == "":
             self.session_cookie = None
@@ -143,11 +140,15 @@ class AgodaConfig:
                     k, v = line.split("=", 1)
                     k = k.strip()
                     v = v.strip().strip("'\"")
-                    if k in [
-                        "AGODA_API_KEY",
-                        "RAPIDAPI_KEY",
-                        "AGODA_COM_ACCESS_TOKEN",
-                    ] and v:
+                    if (
+                        k
+                        in [
+                            "AGODA_API_KEY",
+                            "RAPIDAPI_KEY",
+                            "AGODA_COM_ACCESS_TOKEN",
+                        ]
+                        and v
+                    ):
                         return v
             except Exception:
                 pass
@@ -303,29 +304,12 @@ def search_rapidapi(
                 or prop.get("title")
                 or "Unknown Hotel"
             )
-            hotel_id = str(
-                prop.get("hotel_id")
-                or prop.get("hotelId")
-                or prop.get("id")
-                or item.get("hotel_id", "")
-            )
-            rating = (
-                prop.get("rating")
-                or prop.get("review_score")
-                or prop.get("reviewScore")
-                or prop.get("score")
-            )
+            hotel_id = str(prop.get("hotel_id") or prop.get("hotelId") or prop.get("id") or item.get("hotel_id", ""))
+            rating = prop.get("rating") or prop.get("review_score") or prop.get("reviewScore") or prop.get("score")
             review_count = (
-                prop.get("review_count")
-                or prop.get("review_nr")
-                or prop.get("reviewsCount")
-                or prop.get("reviewCount")
+                prop.get("review_count") or prop.get("review_nr") or prop.get("reviewsCount") or prop.get("reviewCount")
             )
-            review_word = (
-                prop.get("review_word")
-                or prop.get("review_score_word")
-                or prop.get("ratingText")
-            )
+            review_word = prop.get("review_word") or prop.get("review_score_word") or prop.get("ratingText")
 
             # Extract pricing
             price_val = None
@@ -349,18 +333,8 @@ def search_rapidapi(
                 or prop.get("hotelUrl")
                 or (f"https://www.agoda.com/hotel/{hotel_id}.html" if hotel_id else "https://www.agoda.com")
             )
-            photo = (
-                prop.get("photo_url")
-                or prop.get("image")
-                or prop.get("photoUrl")
-                or prop.get("main_photo_url")
-            )
-            address = (
-                prop.get("address")
-                or prop.get("neighborhood")
-                or prop.get("city")
-                or location
-            )
+            photo = prop.get("photo_url") or prop.get("image") or prop.get("photoUrl") or prop.get("main_photo_url")
+            address = prop.get("address") or prop.get("neighborhood") or prop.get("city") or location
 
             badges = []
             if prop.get("is_free_cancellable") or prop.get("freeCancellation"):
@@ -434,23 +408,13 @@ def search_apify(
 
     hotels: List[Hotel] = []
     for item in items[:limit]:
-        name = (
-            item.get("hotelName")
-            or item.get("name")
-            or item.get("title")
-            or "Unknown Hotel"
-        )
+        name = item.get("hotelName") or item.get("name") or item.get("title") or "Unknown Hotel"
         hotel_id = str(item.get("hotelId") or item.get("id") or "")
         rating = item.get("rating") or item.get("score") or item.get("reviewScore")
         review_count = item.get("reviewsCount") or item.get("reviewCount")
         review_word = item.get("ratingText") or item.get("reviewScoreWord")
 
-        price = (
-            item.get("price")
-            or item.get("dailyRate")
-            or item.get("totalPrice")
-            or item.get("rate")
-        )
+        price = item.get("price") or item.get("dailyRate") or item.get("totalPrice") or item.get("rate")
         price_val = None
         price_str = None
         if isinstance(price, (int, float)):
@@ -465,12 +429,7 @@ def search_apify(
                 except Exception:
                     pass
 
-        address = (
-            item.get("address")
-            or item.get("neighborhood")
-            or item.get("city")
-            or location
-        )
+        address = item.get("address") or item.get("neighborhood") or item.get("city") or location
         lat = item.get("lat") or item.get("latitude")
         lng = item.get("lng") or item.get("longitude")
         url_link = (
@@ -718,16 +677,12 @@ def search_hotels(
         ), f"Apify ({config.apify_actor})"
 
     if provider == "scrape":
-        return search_scrape(
-            location, check_in, check_out, guests, rooms, currency, limit, config
-        ), "Agoda Web"
+        return search_scrape(location, check_in, check_out, guests, rooms, currency, limit, config), "Agoda Web"
 
     # Auto mode: RapidAPI -> Apify -> Scrape
     if config.api_key:
         try:
-            results = search_rapidapi(
-                location, check_in, check_out, guests, rooms, currency, limit, config
-            )
+            results = search_rapidapi(location, check_in, check_out, guests, rooms, currency, limit, config)
             if results:
                 return results, "RapidAPI (Agoda)"
         except Exception as e:
@@ -735,9 +690,7 @@ def search_hotels(
 
     if config.apify_token:
         try:
-            results = search_apify(
-                location, check_in, check_out, guests, rooms, currency, limit, config
-            )
+            results = search_apify(location, check_in, check_out, guests, rooms, currency, limit, config)
             if results:
                 return results, f"Apify ({config.apify_actor})"
         except Exception as e:
@@ -745,9 +698,7 @@ def search_hotels(
 
     # Fallback to direct web scrape
     try:
-        results = search_scrape(
-            location, check_in, check_out, guests, rooms, currency, limit, config
-        )
+        results = search_scrape(location, check_in, check_out, guests, rooms, currency, limit, config)
         if results:
             return results, "Agoda Web Fallback"
     except Exception as e:
@@ -893,16 +844,12 @@ def add_lodging_to_wanderlog(
 
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode == 0:
-        console.print(
-            f"[bold green]✅ Successfully added '{hotel.name}' to Wanderlog trip {trip_key}![/bold green]"
-        )
+        console.print(f"[bold green]✅ Successfully added '{hotel.name}' to Wanderlog trip {trip_key}![/bold green]")
         if res.stdout.strip():
             console.print(f"[dim]{res.stdout.strip()}[/dim]")
         return True
     else:
-        err_console.print(
-            f"[bold red]❌ Failed to add lodging to Wanderlog:[/bold red]\n{res.stderr.strip()}"
-        )
+        err_console.print(f"[bold red]❌ Failed to add lodging to Wanderlog:[/bold red]\n{res.stderr.strip()}")
         return False
 
 
@@ -919,11 +866,7 @@ def run_status_check(config: AgodaConfig) -> None:
 
     # 1. RapidAPI
     if config.api_key:
-        masked_key = (
-            config.api_key[:4] + "..." + config.api_key[-4:]
-            if len(config.api_key) > 8
-            else "***"
-        )
+        masked_key = config.api_key[:4] + "..." + config.api_key[-4:] if len(config.api_key) > 8 else "***"
         table.add_row(
             "RapidAPI / Agoda Key",
             "[green]Configured[/green]",
@@ -938,11 +881,7 @@ def run_status_check(config: AgodaConfig) -> None:
 
     # 2. Apify
     if config.apify_token:
-        masked_tok = (
-            config.apify_token[:6] + "..." + config.apify_token[-4:]
-            if len(config.apify_token) > 10
-            else "***"
-        )
+        masked_tok = config.apify_token[:6] + "..." + config.apify_token[-4:] if len(config.apify_token) > 10 else "***"
         table.add_row(
             "Apify Token",
             "[green]Configured[/green]",
@@ -1007,7 +946,13 @@ def main() -> None:
         "--check-out",
         help="Check-out date (YYYY-MM-DD, defaults to +18 days)",
     )
-    search_p.add_argument("-g", "--guests", type=int, default=2, help="Number of adults/guests (default: 2)")
+    search_p.add_argument(
+        "-g",
+        "--guests",
+        type=int,
+        default=2,
+        help="Number of adults/guests (default: 2)",
+    )
     search_p.add_argument("-r", "--rooms", type=int, default=1, help="Number of rooms (default: 1)")
     search_p.add_argument(
         "-c",

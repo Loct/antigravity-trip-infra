@@ -252,4 +252,3 @@ When a user asks to plan or update a trip:
    - Group places geographically by day to minimize transit time.
    - Assign reasonable visit times (`--start-time` and `--end-time`).
 4. **Final Verification**: Run `wanderlog trips show <trip-id> --details --output markdown` or `journal_helper.sh list <trip-key>` and present a clean summary to the user.
-

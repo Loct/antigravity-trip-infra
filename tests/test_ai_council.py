@@ -9,8 +9,6 @@
 #     "openai>=1.0.0",
 # ]
 # ///
-import json
-import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,19 +20,17 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from ai_council import (
-    filter_trip_context,
-    ask_claude,
-    ask_deepseek,
-    ask_council,
-    format_council_markdown,
     CouncilSession,
+    ask_claude,
+    ask_council,
+    ask_deepseek,
     cross_check_trip_data,
     debate_council,
+    filter_trip_context,
+    format_council_markdown,
     format_cross_check_markdown,
     format_debate_markdown,
 )
-import claude_validator
-import deepseek_validator
 
 
 @pytest.fixture
@@ -51,35 +47,72 @@ def sample_trip_payload():
                     {
                         "type": "hotels",
                         "blocks": [
-                            {"place": {"name": "Hanoi Central Hotel", "formatted_address": "Hoan Kiem, Hanoi"}}
-                        ]
+                            {
+                                "place": {
+                                    "name": "Hanoi Central Hotel",
+                                    "formatted_address": "Hoan Kiem, Hanoi",
+                                }
+                            }
+                        ],
                     },
                     {
                         "type": "flights",
                         "blocks": [
                             {
-                                "flightInfo": {"airline": {"iata": "VN"}, "number": "123"},
-                                "depart": {"airport": {"name": "HAN"}, "date": "2026-02-05", "time": "10:00"},
-                                "arrive": {"airport": {"name": "DAD"}, "date": "2026-02-05", "time": "11:20"},
+                                "flightInfo": {
+                                    "airline": {"iata": "VN"},
+                                    "number": "123",
+                                },
+                                "depart": {
+                                    "airport": {"name": "HAN"},
+                                    "date": "2026-02-05",
+                                    "time": "10:00",
+                                },
+                                "arrive": {
+                                    "airport": {"name": "DAD"},
+                                    "date": "2026-02-05",
+                                    "time": "11:20",
+                                },
                             }
-                        ]
+                        ],
                     },
                     {
                         "date": "2026-02-01",
                         "blocks": [
-                            {"type": "place", "place": {"name": "Temple of Literature", "formatted_address": "Dong Da"}},
-                            {"type": "place", "place": {"name": "Bun Cha Huong Lien Restaurant", "formatted_address": "Hai Ba Trung"}}
-                        ]
+                            {
+                                "type": "place",
+                                "place": {
+                                    "name": "Temple of Literature",
+                                    "formatted_address": "Dong Da",
+                                },
+                            },
+                            {
+                                "type": "place",
+                                "place": {
+                                    "name": "Bun Cha Huong Lien Restaurant",
+                                    "formatted_address": "Hai Ba Trung",
+                                },
+                            },
+                        ],
                     },
                     {
                         "date": "2026-02-02",
                         "blocks": [
-                            {"type": "place", "place": {"name": "Ho Chi Minh Mausoleum", "formatted_address": "Ba Dinh"}},
-                            {"type": "text", "text": {"ops": [{"insert": "Dinner at Cha Ca Thang Long restaurant"}]}}
-                        ]
-                    }
+                            {
+                                "type": "place",
+                                "place": {
+                                    "name": "Ho Chi Minh Mausoleum",
+                                    "formatted_address": "Ba Dinh",
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": {"ops": [{"insert": "Dinner at Cha Ca Thang Long restaurant"}]},
+                            },
+                        ],
+                    },
                 ]
-            }
+            },
         }
     }
 
@@ -97,7 +130,7 @@ def test_filter_trip_context_day_focus(sample_trip_payload):
     # Only Day 2
     ctx = filter_trip_context(sample_trip_payload, "", target_days=[2])
     assert "Hanoi Central Hotel" in ctx  # lodging preserved
-    assert "Flight VN 123" in ctx        # flights preserved
+    assert "Flight VN 123" in ctx  # flights preserved
     assert "Day 2" in ctx
     assert "Ho Chi Minh Mausoleum" in ctx
     assert "Temple of Literature" not in ctx  # Day 1 excluded
@@ -216,7 +249,9 @@ def test_cross_check_trip_data_mocked(mock_ds, mock_claude, sample_trip_payload)
     assert res["mode"] == "cross_check"
     assert "Cultural pacing is solid" in res["round_1"]["claude"]
     assert "Transit times between places" in res["round_1"]["deepseek"]
-    assert "Claude proposal does not cause backtracking" in res["round_2_cross_examination"]["deepseek_critique_of_claude"]
+    assert (
+        "Claude proposal does not cause backtracking" in res["round_2_cross_examination"]["deepseek_critique_of_claude"]
+    )
 
     md = format_cross_check_markdown(res)
     assert "Dual AI Travel Data Cross-Check" in md
@@ -228,7 +263,10 @@ def test_cross_check_trip_data_mocked(mock_ds, mock_claude, sample_trip_payload)
 def test_debate_council_mocked(mock_ds, mock_claude):
     mock_claude.side_effect = [
         ("Claude: The overnight sleeper train offers iconic scenery.", None),
-        ("Claude: DeepSeek makes a fair flight buffer point, but train is more memorable.", None),
+        (
+            "Claude: DeepSeek makes a fair flight buffer point, but train is more memorable.",
+            None,
+        ),
     ]
     mock_ds.side_effect = [
         ("DeepSeek: The 1h20m flight saves 12 hours of travel fatigue.", None),

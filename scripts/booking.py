@@ -32,7 +32,6 @@ import httpx
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 console = Console()
 err_console = Console(stderr=True)
@@ -255,7 +254,9 @@ def search_scrape(
                     pass
 
         # Price
-        price_el = card.select_one('[data-testid="price-and-discounted-price"]') or card.select_one(".prco-valign-middle-helper")
+        price_el = card.select_one('[data-testid="price-and-discounted-price"]') or card.select_one(
+            ".prco-valign-middle-helper"
+        )
         price_str = price_el.get_text(strip=True) if price_el else None
         price_val = None
         if price_str:
@@ -323,7 +324,7 @@ def apply_genius_discounts(hotels: List[Hotel], genius_level: int) -> None:
                 h.genius_discount_rate = discount_rate
                 curr_symbol = "€ " if h.currency == "EUR" else ("$ " if h.currency == "USD" else f"{h.currency} ")
                 h.genius_price_text = f"{curr_symbol}{g_price:.2f}"
-                badge_text = f"Genius L{genius_level} (-{int(discount_rate*100)}%)"
+                badge_text = f"Genius L{genius_level} (-{int(discount_rate * 100)}%)"
                 if badge_text not in h.badges:
                     h.badges.append(badge_text)
 
@@ -370,7 +371,9 @@ def print_pretty_table(
     genius_tag = ""
     if genius_level > 0:
         disc_pct = int(GENIUS_DISCOUNT_RATES.get(genius_level, 0.20) * 100)
-        genius_tag = f"\n[bold cyan]✨ Genius Level {genius_level} Active (-{disc_pct}% loyalty discount applied)[/bold cyan]"
+        genius_tag = (
+            f"\n[bold cyan]✨ Genius Level {genius_level} Active (-{disc_pct}% loyalty discount applied)[/bold cyan]"
+        )
 
     table = Table(
         title=f"🏨 Booking.com Hotels in {location} ({check_in} → {check_out}, {guests} guests){genius_tag}\n[dim]Source: {provider_name}[/dim]",
@@ -494,16 +497,12 @@ def add_lodging_to_wanderlog(
 
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode == 0:
-        console.print(
-            f"[bold green]✅ Successfully added '{hotel.name}' to Wanderlog trip {trip_key}![/bold green]"
-        )
+        console.print(f"[bold green]✅ Successfully added '{hotel.name}' to Wanderlog trip {trip_key}![/bold green]")
         if res.stdout.strip():
             console.print(f"[dim]{res.stdout.strip()}[/dim]")
         return True
     else:
-        err_console.print(
-            f"[bold red]❌ Failed to add lodging to Wanderlog:[/bold red]\n{res.stderr.strip()}"
-        )
+        err_console.print(f"[bold red]❌ Failed to add lodging to Wanderlog:[/bold red]\n{res.stderr.strip()}")
         return False
 
 
@@ -591,7 +590,13 @@ def main() -> None:
         "--check-out",
         help="Check-out date (YYYY-MM-DD, defaults to +18 days)",
     )
-    search_p.add_argument("-g", "--guests", type=int, default=2, help="Number of adults/guests (default: 2)")
+    search_p.add_argument(
+        "-g",
+        "--guests",
+        type=int,
+        default=2,
+        help="Number of adults/guests (default: 2)",
+    )
     search_p.add_argument("-r", "--rooms", type=int, default=1, help="Number of rooms (default: 1)")
     search_p.add_argument(
         "-c",

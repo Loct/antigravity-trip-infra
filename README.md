@@ -256,6 +256,36 @@ You can also run the script manually from inside the container:
 
 ---
 
+## Python Code Quality & Pre-Commit Hooks
+
+The repository uses modern Python tooling (`pre-commit` and `ruff`) to enforce code formatting, linting, and tests across all scripts.
+
+### Installed Hooks
+- **pre-commit-hooks**: trailing whitespace, end-of-file fixer, YAML/JSON/TOML validation, merge conflicts, debug statements, and AST checks.
+- **ruff**: fast Python linter (with auto-fix) and code formatter configured in `pyproject.toml`.
+- **pytest**: runs full unit test suite on `pre-push` to guarantee clean commits before pushing.
+
+### Running Hooks Manually:
+
+```bash
+# Run all pre-commit hooks on all files
+pre-commit run --all-files
+
+# Reinstall/update git hooks
+pre-commit install -t pre-commit -t pre-push
+
+# Run ruff linting
+uv run ruff check scripts/ tests/
+
+# Run ruff formatting check
+uv run ruff format --check scripts/ tests/
+
+# Run unit tests
+uv run pytest
+```
+
+---
+
 ## Testing & CLI Diagnostics
 
 A built-in diagnostic script is provided to verify Wanderlog connectivity and list your trips:
