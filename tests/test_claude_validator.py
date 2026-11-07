@@ -9,7 +9,6 @@
 #     "openai>=1.0.0",
 # ]
 # ///
-import json
 import os
 import sys
 from pathlib import Path
@@ -24,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from claude_validator import (
     ClaudeProviderConfig,
     extract_trip_id,
-    summarize_trip_context,
     run_claude_validation,
+    summarize_trip_context,
     verify_connection,
 )
 
@@ -46,14 +45,25 @@ def test_claude_provider_config_defaults():
 
 
 def test_claude_provider_config_haiku():
-    with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-testkey", "ANTHROPIC_MODEL": "claude-3-5-haiku-20241022"}, clear=True):
+    with patch.dict(
+        os.environ,
+        {
+            "ANTHROPIC_API_KEY": "sk-ant-testkey",
+            "ANTHROPIC_MODEL": "claude-3-5-haiku-20241022",
+        },
+        clear=True,
+    ):
         cfg = ClaudeProviderConfig()
         assert cfg.model == "claude-3-5-haiku-20241022"
         assert cfg.is_thinking_supported() is False
 
 
 def test_claude_provider_config_openrouter():
-    with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-testkey", "CLAUDE_PROVIDER": "openrouter"}, clear=True):
+    with patch.dict(
+        os.environ,
+        {"OPENROUTER_API_KEY": "sk-or-testkey", "CLAUDE_PROVIDER": "openrouter"},
+        clear=True,
+    ):
         cfg = ClaudeProviderConfig()
         assert cfg.provider == "openrouter"
         assert cfg.base_url == "https://openrouter.ai/api/v1"
@@ -79,17 +89,28 @@ def test_summarize_trip_context():
                     {
                         "type": "hotels",
                         "blocks": [
-                            {"place": {"name": "Kyoto Ryokan", "formatted_address": "Gion, Kyoto"}}
-                        ]
+                            {
+                                "place": {
+                                    "name": "Kyoto Ryokan",
+                                    "formatted_address": "Gion, Kyoto",
+                                }
+                            }
+                        ],
                     },
                     {
                         "date": "2026-11-10",
                         "blocks": [
-                            {"type": "place", "place": {"name": "Kiyomizu-dera", "formatted_address": "Higashiyama"}}
-                        ]
-                    }
+                            {
+                                "type": "place",
+                                "place": {
+                                    "name": "Kiyomizu-dera",
+                                    "formatted_address": "Higashiyama",
+                                },
+                            }
+                        ],
+                    },
                 ]
-            }
+            },
         }
     }
     summary = summarize_trip_context(sample_data, "")
@@ -100,14 +121,17 @@ def test_summarize_trip_context():
 
 def test_run_claude_validation_mocked_non_streaming():
     cfg = ClaudeProviderConfig(api_key="sk-ant-test")
-    
+
     mock_client = MagicMock()
     mock_resp = MagicMock()
-    
+
     thinking_block = SimpleNamespace(type="thinking", thinking="Let's review the hotel continuity and timing.")
-    text_block = SimpleNamespace(type="text", text="# 📋 Trip Audit Report: Kyoto\n## ✅ Final Verdict\nEXCELLENT")
+    text_block = SimpleNamespace(
+        type="text",
+        text="# 📋 Trip Audit Report: Kyoto\n## ✅ Final Verdict\nEXCELLENT",
+    )
     mock_resp.content = [thinking_block, text_block]
-    
+
     mock_client.messages.create.return_value = mock_resp
 
     with patch.object(cfg, "get_anthropic_client", return_value=mock_client):

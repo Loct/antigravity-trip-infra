@@ -30,15 +30,11 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-import httpx
 from openai import OpenAI
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
 console = Console()
 
@@ -74,7 +70,9 @@ class ProviderConfig:
         base_url: Optional[str] = None,
     ) -> None:
         self.provider = provider or os.getenv("DEEPSEEK_PROVIDER", "").lower()
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("GROQ_API_KEY")
+        self.api_key = (
+            api_key or os.getenv("OPENROUTER_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("GROQ_API_KEY")
+        )
         self.base_url = base_url or os.getenv("OPENROUTER_BASE_URL") or os.getenv("DEEPSEEK_BASE_URL")
         self.model = model or os.getenv("OPENROUTER_MODEL") or os.getenv("DEEPSEEK_MODEL")
 
@@ -152,7 +150,16 @@ def fetch_trip_data(target: str) -> Tuple[Dict[str, Any], str]:
                 data = json.load(f)
             # Generate markdown via wanderlog trips show --file <path> -o markdown --details
             proc = subprocess.run(
-                ["wanderlog", "trips", "show", "--file", str(path), "-o", "markdown", "--details"],
+                [
+                    "wanderlog",
+                    "trips",
+                    "show",
+                    "--file",
+                    str(path),
+                    "-o",
+                    "markdown",
+                    "--details",
+                ],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -172,9 +179,7 @@ def fetch_trip_data(target: str) -> Tuple[Dict[str, Any], str]:
         check=False,
     )
     if proc_json.returncode != 0:
-        raise RuntimeError(
-            f"Failed to fetch trip from Wanderlog (ID: {trip_id}): {proc_json.stderr.strip()}"
-        )
+        raise RuntimeError(f"Failed to fetch trip from Wanderlog (ID: {trip_id}): {proc_json.stderr.strip()}")
     data = json.loads(proc_json.stdout)
 
     # 2. Fetch Markdown representation for comprehensive itinerary view
@@ -388,7 +393,10 @@ def run_validation(
         )
 
         if stream:
-            with console.status("[bold green]DeepSeek is analyzing the itinerary...[/bold green]", spinner="dots"):
+            with console.status(
+                "[bold green]DeepSeek is analyzing the itinerary...[/bold green]",
+                spinner="dots",
+            ):
                 pass
 
             console.print("\n[bold cyan]─── DeepSeek Validation Report ───[/bold cyan]\n")
@@ -448,13 +456,16 @@ def run_validation(
 def verify_connection(provider_cfg: ProviderConfig) -> bool:
     """Test connection with a quick query."""
     try:
-        console.print(
-            f"Testing connection to [bold]{provider_cfg.provider}[/bold] ({provider_cfg.model})..."
-        )
+        console.print(f"Testing connection to [bold]{provider_cfg.provider}[/bold] ({provider_cfg.model})...")
         client = provider_cfg.get_client()
         resp = client.chat.completions.create(
             model=provider_cfg.model,
-            messages=[{"role": "user", "content": "Respond with 'VALIDATOR_READY' if you can read this."}],
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Respond with 'VALIDATOR_READY' if you can read this.",
+                }
+            ],
             max_tokens=20,
         )
         content = resp.choices[0].message.content or ""
@@ -588,9 +599,7 @@ def main() -> None:
     trip_summary = summarize_trip_context(trip_json, trip_md)
 
     # 3. Run validation
-    report_text, reasoning = run_validation(
-        trip_summary, provider_cfg, stream=(args.format == "rich")
-    )
+    report_text, reasoning = run_validation(trip_summary, provider_cfg, stream=(args.format == "rich"))
 
     # 4. Output formatting
     if args.format == "markdown":

@@ -63,7 +63,7 @@ cmd_list() {
   echo "📖 Journal Stops for Trip: ${trip_key} (${count} stops)"
   echo "---------------------------------------------------------"
   echo "$stops" | jq -r '
-    to_entries[] | 
+    to_entries[] |
     "[\(.key)] ID: \(.value.id)\n    Title: \(.value.title)\n    Date: \(.value.dateTime // "None")\n    Place: \(.value.place.name // "None")\n    Media: \(.value.media | length) items"
   '
 }
@@ -205,7 +205,7 @@ cmd_attach_photo() {
   else
     # Find index by stop ID
     stop_idx=$(echo "$trip_data" | jq -r --arg id "$target_stop" '
-      .tripPlan.itinerary.journal.stops // [] | 
+      .tripPlan.itinerary.journal.stops // [] |
       to_entries[] | select((.value.id | tostring) == $id) | .key
     ')
   fi
@@ -323,7 +323,7 @@ cmd_edit_stop() {
     stop_idx="$target_stop"
   else
     stop_idx=$(echo "$trip_data" | jq -r --arg id "$target_stop" '
-      .tripPlan.itinerary.journal.stops // [] | 
+      .tripPlan.itinerary.journal.stops // [] |
       to_entries[] | select((.value.id | tostring) == $id) | .key
     ')
   fi

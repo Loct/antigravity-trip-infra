@@ -8,7 +8,6 @@
 #     "openai>=1.0.0",
 # ]
 # ///
-import json
 import os
 import sys
 from pathlib import Path
@@ -22,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from deepseek_validator import (
     ProviderConfig,
     extract_trip_id,
-    summarize_trip_context,
     run_validation,
+    summarize_trip_context,
     verify_connection,
 )
 
@@ -36,7 +35,11 @@ def test_extract_trip_id():
 
 
 def test_provider_config_openrouter_defaults():
-    with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-test", "DEEPSEEK_PROVIDER": ""}, clear=True):
+    with patch.dict(
+        os.environ,
+        {"OPENROUTER_API_KEY": "sk-or-test", "DEEPSEEK_PROVIDER": ""},
+        clear=True,
+    ):
         cfg = ProviderConfig()
         assert cfg.provider == "openrouter"
         assert cfg.base_url == "https://openrouter.ai/api/v1"

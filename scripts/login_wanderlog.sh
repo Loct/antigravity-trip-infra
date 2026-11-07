@@ -83,7 +83,7 @@ case "$CHOICE" in
 
     echo "[-] Updated .env with your session cookie."
     echo "[-] Applying credentials to container..."
-    
+
     # Restart container with updated env
     docker compose up -d --force-recreate
 

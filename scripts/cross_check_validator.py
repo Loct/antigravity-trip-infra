@@ -22,16 +22,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Tuple
 
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 # Add scripts directory to path
@@ -63,7 +61,11 @@ def extract_verdict(text: str) -> str:
         "GOOD WITH MINOR TWEAKS",
         "EXCELLENT",
     ]:
-        if re.search(rf"(?:Final Verdict|Rating).*?{re.escape(v)}", text, re.IGNORECASE | re.DOTALL):
+        if re.search(
+            rf"(?:Final Verdict|Rating).*?{re.escape(v)}",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        ):
             return v
 
     # Fallback to checking full text
@@ -124,48 +126,54 @@ def synthesize_cross_check_report(
 
     # Evaluate consensus
     if ds_verdict == claude_verdict:
-        lines.append(f"> [!IMPORTANT]\n> **High Model Agreement:** Both Claude and DeepSeek independently reached the same overall verdict: **{claude_verdict}**.\n")
+        lines.append(
+            f"> [!IMPORTANT]\n> **High Model Agreement:** Both Claude and DeepSeek independently reached the same overall verdict: **{claude_verdict}**.\n"
+        )
     else:
-        lines.append(f"> [!NOTE]\n> **Model Nuance:** Claude rated the trip as **{claude_verdict}** while DeepSeek rated it **{ds_verdict}**. Review their specific findings below to resolve differences.\n")
+        lines.append(
+            f"> [!NOTE]\n> **Model Nuance:** Claude rated the trip as **{claude_verdict}** while DeepSeek rated it **{ds_verdict}**. Review their specific findings below to resolve differences.\n"
+        )
 
-    lines.extend([
-        "## 🛑 Critical Issues Comparison",
-        "### Claude Analysis (Critical)",
-        claude_critical if claude_critical else "No critical issues detected by Claude.",
-        "",
-        "### DeepSeek Analysis (Critical)",
-        ds_critical if ds_critical else "No critical issues detected by DeepSeek.",
-        "",
-        "## ⚠️ Warnings & Logistical Friction Comparison",
-        "### Claude Warnings & Route Observations",
-        claude_warnings if claude_warnings else "No major warnings flagged by Claude.",
-        "",
-        "### DeepSeek Warnings & Route Observations",
-        ds_warnings if ds_warnings else "No major warnings flagged by DeepSeek.",
-        "",
-        "## 💡 Actionable Fixes & Wanderlog Adjustments",
-        "### Recommended Edits from Claude",
-        claude_fixes if claude_fixes else "None specified.",
-        "",
-        "### Recommended Edits from DeepSeek",
-        ds_fixes if ds_fixes else "None specified.",
-        "",
-        "---",
-        "",
-        "<details>",
-        "<summary><b>📖 Expand Full Claude Report</b></summary>",
-        "",
-        claude_report,
-        "",
-        "</details>",
-        "",
-        "<details>",
-        "<summary><b>📖 Expand Full DeepSeek Report</b></summary>",
-        "",
-        ds_report,
-        "",
-        "</details>",
-    ])
+    lines.extend(
+        [
+            "## 🛑 Critical Issues Comparison",
+            "### Claude Analysis (Critical)",
+            claude_critical if claude_critical else "No critical issues detected by Claude.",
+            "",
+            "### DeepSeek Analysis (Critical)",
+            ds_critical if ds_critical else "No critical issues detected by DeepSeek.",
+            "",
+            "## ⚠️ Warnings & Logistical Friction Comparison",
+            "### Claude Warnings & Route Observations",
+            claude_warnings if claude_warnings else "No major warnings flagged by Claude.",
+            "",
+            "### DeepSeek Warnings & Route Observations",
+            ds_warnings if ds_warnings else "No major warnings flagged by DeepSeek.",
+            "",
+            "## 💡 Actionable Fixes & Wanderlog Adjustments",
+            "### Recommended Edits from Claude",
+            claude_fixes if claude_fixes else "None specified.",
+            "",
+            "### Recommended Edits from DeepSeek",
+            ds_fixes if ds_fixes else "None specified.",
+            "",
+            "---",
+            "",
+            "<details>",
+            "<summary><b>📖 Expand Full Claude Report</b></summary>",
+            "",
+            claude_report,
+            "",
+            "</details>",
+            "",
+            "<details>",
+            "<summary><b>📖 Expand Full DeepSeek Report</b></summary>",
+            "",
+            ds_report,
+            "",
+            "</details>",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -240,13 +248,15 @@ def display_cross_check_summary(
     claude_verdict = extract_verdict(claude_report)
 
     console.print("\n")
-    console.print(Panel(
-        f"[bold white]Dual AI Cross-Check Results for:[/bold white] [bold cyan]{trip_title}[/bold cyan]\n"
-        f"Comparing independent audits from [bold magenta]Claude[/bold magenta] ({claude_model}) "
-        f"and [bold blue]DeepSeek[/bold blue] ({ds_model})",
-        title="[bold yellow]⚖️ Wanderlog Cross-Check Summary[/bold yellow]",
-        border_style="yellow",
-    ))
+    console.print(
+        Panel(
+            f"[bold white]Dual AI Cross-Check Results for:[/bold white] [bold cyan]{trip_title}[/bold cyan]\n"
+            f"Comparing independent audits from [bold magenta]Claude[/bold magenta] ({claude_model}) "
+            f"and [bold blue]DeepSeek[/bold blue] ({ds_model})",
+            title="[bold yellow]⚖️ Wanderlog Cross-Check Summary[/bold yellow]",
+            border_style="yellow",
+        )
+    )
 
     table = Table(title="Model Verdict Comparison", show_header=True, header_style="bold cyan")
     table.add_column("AI Evaluator", style="bold")
