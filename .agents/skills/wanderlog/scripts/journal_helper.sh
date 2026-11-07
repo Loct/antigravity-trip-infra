@@ -83,15 +83,42 @@ cmd_add_stop() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --title) title="$2"; shift 2 ;;
-      --date-time) date_time="$2"; shift 2 ;;
-      --place-name) place_name="$2"; shift 2 ;;
-      --place-id) place_id="$2"; shift 2 ;;
-      --lat) lat="$2"; shift 2 ;;
-      --lng) lng="$2"; shift 2 ;;
-      --caption) caption="$2"; shift 2 ;;
-      --index) insert_idx="$2"; shift 2 ;;
-      *) echo "Unknown option: $1" >&2; exit 1 ;;
+      --title)
+        title="$2"
+        shift 2
+        ;;
+      --date-time)
+        date_time="$2"
+        shift 2
+        ;;
+      --place-name)
+        place_name="$2"
+        shift 2
+        ;;
+      --place-id)
+        place_id="$2"
+        shift 2
+        ;;
+      --lat)
+        lat="$2"
+        shift 2
+        ;;
+      --lng)
+        lng="$2"
+        shift 2
+        ;;
+      --caption)
+        caption="$2"
+        shift 2
+        ;;
+      --index)
+        insert_idx="$2"
+        shift 2
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        exit 1
+        ;;
     esac
   done
 
@@ -306,12 +333,30 @@ cmd_edit_stop() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --title) title="$2"; shift 2 ;;
-      --date-time) date_time="$2"; shift 2 ;;
-      --caption) caption="$2"; shift 2 ;;
-      --place-name) place_name="$2"; shift 2 ;;
-      --place-id) place_id="$2"; shift 2 ;;
-      *) echo "Unknown option: $1" >&2; exit 1 ;;
+      --title)
+        title="$2"
+        shift 2
+        ;;
+      --date-time)
+        date_time="$2"
+        shift 2
+        ;;
+      --caption)
+        caption="$2"
+        shift 2
+        ;;
+      --place-name)
+        place_name="$2"
+        shift 2
+        ;;
+      --place-id)
+        place_id="$2"
+        shift 2
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        exit 1
+        ;;
     esac
   done
 
@@ -417,15 +462,26 @@ EOF
 
 case "${1:-}" in
   list)
-    shift; cmd_list "$@" ;;
+    shift
+    cmd_list "$@"
+    ;;
   add-stop)
-    shift; cmd_add_stop "$@" ;;
+    shift
+    cmd_add_stop "$@"
+    ;;
   edit-stop)
-    shift; cmd_edit_stop "$@" ;;
+    shift
+    cmd_edit_stop "$@"
+    ;;
   attach-photo)
-    shift; cmd_attach_photo "$@" ;;
-  -h|--help|help)
-    usage ;;
+    shift
+    cmd_attach_photo "$@"
+    ;;
+  -h | --help | help)
+    usage
+    ;;
   *)
-    usage; exit 1 ;;
+    usage
+    exit 1
+    ;;
 esac

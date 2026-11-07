@@ -78,7 +78,7 @@ case "$CHOICE" in
       sed -i.bak "s|^WANDERLOG_AUTH_SESSION_COOKIE=.*|WANDERLOG_AUTH_SESSION_COOKIE=\"${COOKIE_VAL}\"|" .env
       rm -f .env.bak
     else
-      echo "WANDERLOG_AUTH_SESSION_COOKIE=\"${COOKIE_VAL}\"" >> .env
+      echo "WANDERLOG_AUTH_SESSION_COOKIE=\"${COOKIE_VAL}\"" >>.env
     fi
 
     echo "[-] Updated .env with your session cookie."

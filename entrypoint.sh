@@ -9,11 +9,11 @@ echo "=========================================================="
 mkdir -p /root/.config/wanderlog
 
 export WANDERLOG_DISABLE_KEYCHAIN=1
-echo "export WANDERLOG_DISABLE_KEYCHAIN=1" > /etc/profile.d/wanderlog.sh
+echo "export WANDERLOG_DISABLE_KEYCHAIN=1" >/etc/profile.d/wanderlog.sh
 
 if [ -n "${WANDERLOG_AUTH_SESSION_COOKIE:-}" ]; then
   echo "[-] Initializing Wanderlog credentials from environment..."
-  cat <<EOF > /root/.config/wanderlog/credentials.json
+  cat <<EOF >/root/.config/wanderlog/credentials.json
 {
   "SessionCookie": "${WANDERLOG_AUTH_SESSION_COOKIE}",
   "session_cookie": "${WANDERLOG_AUTH_SESSION_COOKIE}",
@@ -24,7 +24,7 @@ if [ -n "${WANDERLOG_AUTH_SESSION_COOKIE:-}" ]; then
 EOF
   chmod 600 /root/.config/wanderlog/credentials.json
 
-  cat <<EOF > /root/.config/wanderlog/config.yaml
+  cat <<EOF >/root/.config/wanderlog/config.yaml
 auth:
   session:
     cookie: "${WANDERLOG_AUTH_SESSION_COOKIE}"
@@ -33,9 +33,9 @@ EOF
   chmod 600 /root/.config/wanderlog/config.yaml
 
   # Ensure env is available in future interactive shells
-  echo "export WANDERLOG_AUTH_SESSION_COOKIE=\"${WANDERLOG_AUTH_SESSION_COOKIE}\"" >> /etc/profile.d/wanderlog.sh
-  echo "export WANDERLOG_SESSION=\"${WANDERLOG_AUTH_SESSION_COOKIE}\"" >> /etc/profile.d/wanderlog.sh
-  echo "export WANDERLOG_AUTH_SESSION_XSRF_TOKEN=\"${WANDERLOG_AUTH_SESSION_XSRF_TOKEN:-}\"" >> /etc/profile.d/wanderlog.sh
+  echo "export WANDERLOG_AUTH_SESSION_COOKIE=\"${WANDERLOG_AUTH_SESSION_COOKIE}\"" >>/etc/profile.d/wanderlog.sh
+  echo "export WANDERLOG_SESSION=\"${WANDERLOG_AUTH_SESSION_COOKIE}\"" >>/etc/profile.d/wanderlog.sh
+  echo "export WANDERLOG_AUTH_SESSION_XSRF_TOKEN=\"${WANDERLOG_AUTH_SESSION_XSRF_TOKEN:-}\"" >>/etc/profile.d/wanderlog.sh
   chmod +x /etc/profile.d/wanderlog.sh
 
   echo "[-] Wanderlog credentials configured successfully."
@@ -87,8 +87,8 @@ if [ -n "$GH_AUTH_TOKEN" ]; then
   gh auth setup-git 2>/dev/null || true
   export GH_TOKEN="$GH_AUTH_TOKEN"
   export GITHUB_TOKEN="$GH_AUTH_TOKEN"
-  echo "export GH_TOKEN=\"$GH_AUTH_TOKEN\"" > /etc/profile.d/github.sh
-  echo "export GITHUB_TOKEN=\"$GH_AUTH_TOKEN\"" >> /etc/profile.d/github.sh
+  echo "export GH_TOKEN=\"$GH_AUTH_TOKEN\"" >/etc/profile.d/github.sh
+  echo "export GITHUB_TOKEN=\"$GH_AUTH_TOKEN\"" >>/etc/profile.d/github.sh
   chmod +x /etc/profile.d/github.sh
 fi
 
@@ -98,7 +98,7 @@ BOOKING_COOKIE="${BOOKING_SESSION_COOKIE:-${BOOKING_COM_COOKIES:-}}"
 
 if [ -n "$BOOKING_COOKIE" ]; then
   echo "[-] Initializing Booking.com session credentials from environment..."
-  cat <<EOF > /root/.config/booking/credentials.json
+  cat <<EOF >/root/.config/booking/credentials.json
 {
   "session_cookie": "${BOOKING_COOKIE}",
   "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -111,7 +111,7 @@ fi
 mkdir -p /root/.config/apify
 if [ -n "${APIFY_TOKEN:-}" ]; then
   echo "[-] Initializing Apify credentials from environment..."
-  cat <<EOF > /root/.config/apify/credentials.json
+  cat <<EOF >/root/.config/apify/credentials.json
 {
   "token": "${APIFY_TOKEN}",
   "agoda_actor": "${APIFY_AGODA_ACTOR:-tri_angle/agoda-scraper}",
@@ -128,7 +128,7 @@ AGODA_COOKIE="${AGODA_SESSION_COOKIE:-${AGODA_COM_COOKIES:-}}"
 
 if [ -n "$AGODA_COOKIE" ]; then
   echo "[-] Initializing Agoda session credentials from environment..."
-  cat <<EOF > /root/.config/agoda/credentials.json
+  cat <<EOF >/root/.config/agoda/credentials.json
 {
   "session_cookie": "${AGODA_COOKIE}",
   "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -139,7 +139,7 @@ fi
 
 if [ -n "$AGODA_KEY" ]; then
   echo "[-] Initializing Agoda API credentials from environment..."
-  cat <<EOF > /root/.config/agoda/api_config.json
+  cat <<EOF >/root/.config/agoda/api_config.json
 {
   "api_key": "${AGODA_KEY}",
   "rapidapi_host": "${AGODA_RAPIDAPI_HOST:-agoda-com.p.rapidapi.com}",
@@ -191,7 +191,7 @@ echo "[-] Configuring permissive mode across all Antigravity settings..."
 mkdir -p /root/.gemini/config/projects /root/.gemini/antigravity-cli
 
 # A. Global config.json
-cat <<EOF > /root/.gemini/config/config.json
+cat <<EOF >/root/.gemini/config/config.json
 {
   "userSettings": {
     "cliRemoteControlHostname": "${REMOTE_CONTROL_HOSTNAME:-wanderlog-agent}",
@@ -217,7 +217,7 @@ cat <<EOF > /root/.gemini/config/config.json
 EOF
 
 # B. Standalone project config (handles outside-of-project workspace)
-cat <<EOF > /root/.gemini/config/projects/outside-of-project.json
+cat <<EOF >/root/.gemini/config/projects/outside-of-project.json
 {
   "id": "outside-of-project",
   "name": "Outside of Project",
@@ -228,7 +228,7 @@ cat <<EOF > /root/.gemini/config/projects/outside-of-project.json
 EOF
 
 # C. CLI settings.json
-cat <<EOF > /root/.gemini/antigravity-cli/settings.json
+cat <<EOF >/root/.gemini/antigravity-cli/settings.json
 {
   "trustedWorkspaces": [
     "/workspace"
@@ -255,8 +255,8 @@ EOF
 cp /root/.gemini/antigravity-cli/settings.json /root/.gemini/config/settings.json 2>/dev/null || true
 
 # Ensure interactive shells also default to permissive mode
-echo "alias agy='agy --dangerously-skip-permissions'" > /etc/profile.d/permissive.sh
-echo "alias agy='agy --dangerously-skip-permissions'" >> /root/.bashrc
+echo "alias agy='agy --dangerously-skip-permissions'" >/etc/profile.d/permissive.sh
+echo "alias agy='agy --dangerously-skip-permissions'" >>/root/.bashrc
 chmod +x /etc/profile.d/permissive.sh
 
 # 6. Remote Control
@@ -264,7 +264,7 @@ ENABLE_REMOTE_CONTROL="${ENABLE_REMOTE_CONTROL:-true}"
 
 if [ "$ENABLE_REMOTE_CONTROL" = "true" ]; then
   echo "[-] Starting Antigravity Remote Control daemon in permissive mode..."
-  agy --dangerously-skip-permissions remote-control serve > /root/.gemini/antigravity-cli/remote-control.log 2>&1 &
+  agy --dangerously-skip-permissions remote-control serve >/root/.gemini/antigravity-cli/remote-control.log 2>&1 &
   DAEMON_PID=$!
   sleep 3
 
