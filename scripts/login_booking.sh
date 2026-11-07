@@ -55,7 +55,7 @@ case "$CHOICE" in
       sed -i.bak "s|^BOOKING_SESSION_COOKIE=.*|BOOKING_SESSION_COOKIE=\"${COOKIE_VAL}\"|" .env
       rm -f .env.bak
     else
-      echo "BOOKING_SESSION_COOKIE=\"${COOKIE_VAL}\"" >> .env
+      echo "BOOKING_SESSION_COOKIE=\"${COOKIE_VAL}\"" >>.env
     fi
 
     docker compose exec -T "$SERVICE_NAME" bash -c "mkdir -p /root/.config/booking && cat <<EOF > /root/.config/booking/credentials.json

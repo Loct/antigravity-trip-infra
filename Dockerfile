@@ -46,12 +46,14 @@ RUN curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /usr
 # Install uv and uvx
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# Install Python via uv, create standard python symlinks, and install pre-commit & ruff
+# Install Python via uv, create standard python symlinks, and install pre-commit, ruff, shfmt, & shellcheck
 RUN uv python install 3.12 && \
     ln -sf "$(uv python find 3.12)" /usr/local/bin/python3 && \
     ln -sf "$(uv python find 3.12)" /usr/local/bin/python && \
     uv tool install pre-commit && \
     uv tool install ruff && \
+    uv tool install shfmt-py && \
+    uv tool install shellcheck-py && \
     uv cache clean
 
 # Install the compiled wanderlog CLI from builder stage

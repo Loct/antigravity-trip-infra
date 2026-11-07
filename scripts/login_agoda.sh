@@ -59,7 +59,7 @@ case "$CHOICE" in
       sed -i.bak "s|^AGODA_API_KEY=.*|AGODA_API_KEY=\"${API_KEY_VAL}\"|" .env
       rm -f .env.bak
     else
-      echo "AGODA_API_KEY=\"${API_KEY_VAL}\"" >> .env
+      echo "AGODA_API_KEY=\"${API_KEY_VAL}\"" >>.env
     fi
 
     # Set AGODA_RAPIDAPI_HOST
@@ -67,7 +67,7 @@ case "$CHOICE" in
       sed -i.bak "s|^AGODA_RAPIDAPI_HOST=.*|AGODA_RAPIDAPI_HOST=\"${HOST_VAL}\"|" .env
       rm -f .env.bak
     else
-      echo "AGODA_RAPIDAPI_HOST=\"${HOST_VAL}\"" >> .env
+      echo "AGODA_RAPIDAPI_HOST=\"${HOST_VAL}\"" >>.env
     fi
 
     docker compose exec -T "$SERVICE_NAME" bash -c "mkdir -p /root/.config/agoda && cat <<EOF > /root/.config/agoda/api_config.json
@@ -111,14 +111,14 @@ chmod 600 /root/.config/agoda/api_config.json"
       sed -i.bak "s|^APIFY_TOKEN=.*|APIFY_TOKEN=\"${APIFY_VAL}\"|" .env
       rm -f .env.bak
     else
-      echo "APIFY_TOKEN=\"${APIFY_VAL}\"" >> .env
+      echo "APIFY_TOKEN=\"${APIFY_VAL}\"" >>.env
     fi
 
     if grep -q "^APIFY_AGODA_ACTOR=" .env; then
       sed -i.bak "s|^APIFY_AGODA_ACTOR=.*|APIFY_AGODA_ACTOR=\"${ACTOR_VAL}\"|" .env
       rm -f .env.bak
     else
-      echo "APIFY_AGODA_ACTOR=\"${ACTOR_VAL}\"" >> .env
+      echo "APIFY_AGODA_ACTOR=\"${ACTOR_VAL}\"" >>.env
     fi
 
     docker compose exec -T "$SERVICE_NAME" bash -c "mkdir -p /root/.config/apify && cat <<EOF > /root/.config/apify/credentials.json
@@ -158,7 +158,7 @@ chmod 600 /root/.config/apify/credentials.json"
       sed -i.bak "s|^AGODA_SESSION_COOKIE=.*|AGODA_SESSION_COOKIE=\"${COOKIE_VAL}\"|" .env
       rm -f .env.bak
     else
-      echo "AGODA_SESSION_COOKIE=\"${COOKIE_VAL}\"" >> .env
+      echo "AGODA_SESSION_COOKIE=\"${COOKIE_VAL}\"" >>.env
     fi
 
     docker compose exec -T "$SERVICE_NAME" bash -c "mkdir -p /root/.config/agoda && cat <<EOF > /root/.config/agoda/credentials.json

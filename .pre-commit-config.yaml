@@ -31,6 +31,18 @@ repos:
       # Run the formatter
       - id: ruff-format
 
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.14.1-1
+    hooks:
+      - id: shfmt
+        args: [-w, -i, "2", -ci]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [-e, "SC2034,SC2129"]
+
   - repo: local
     hooks:
       - id: pytest

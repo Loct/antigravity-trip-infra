@@ -88,7 +88,7 @@ case "$CHOICE" in
         sed -i.bak "s|^GH_TOKEN=.*|GH_TOKEN=\"${GH_INPUT_TOKEN}\"|" .env
         rm -f .env.bak
       else
-        echo "GH_TOKEN=\"${GH_INPUT_TOKEN}\"" >> .env
+        echo "GH_TOKEN=\"${GH_INPUT_TOKEN}\"" >>.env
       fi
       echo "[-] Saved GH_TOKEN to .env."
     fi

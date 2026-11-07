@@ -23,7 +23,7 @@ update_env_var() {
     sed -i "s|^${var_name}=.*|${var_name}=${var_val}|" "$ENV_FILE"
   else
     # Append
-    echo "${var_name}=${var_val}" >> "$ENV_FILE"
+    echo "${var_name}=${var_val}" >>"$ENV_FILE"
   fi
 }
 

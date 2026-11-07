@@ -34,7 +34,7 @@ if grep -q "^HOST_PROJECT_DIR=" .env; then
   sed -i.bak "s|^HOST_PROJECT_DIR=.*|HOST_PROJECT_DIR=\"${CURRENT_HOST_DIR}\"|" .env 2>/dev/null || true
   rm -f .env.bak 2>/dev/null || true
 else
-  echo "HOST_PROJECT_DIR=\"${CURRENT_HOST_DIR}\"" >> .env
+  echo "HOST_PROJECT_DIR=\"${CURRENT_HOST_DIR}\"" >>.env
 fi
 
 # Pre-cache updater image for self-update capability

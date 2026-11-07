@@ -256,13 +256,15 @@ You can also run the script manually from inside the container:
 
 ---
 
-## Python Code Quality & Pre-Commit Hooks
+## Code Quality & Pre-Commit Hooks
 
-The repository uses modern Python tooling (`pre-commit` and `ruff`) to enforce code formatting, linting, and tests across all scripts.
+The repository uses modern development tooling (`pre-commit`, `ruff`, `shfmt`, and `shellcheck`) to enforce code formatting, linting, and tests across all Python and Shell scripts.
 
 ### Installed Hooks
 - **pre-commit-hooks**: trailing whitespace, end-of-file fixer, YAML/JSON/TOML validation, merge conflicts, debug statements, and AST checks.
 - **ruff**: fast Python linter (with auto-fix) and code formatter configured in `pyproject.toml`.
+- **shfmt**: shell script formatter and beautifier (2-space indentation, consistent syntax).
+- **shellcheck**: static analysis linter for bash and POSIX shell scripts to detect bugs and portability issues.
 - **pytest**: runs full unit test suite on `pre-push` to guarantee clean commits before pushing.
 
 ### Running Hooks Manually:
@@ -274,11 +276,13 @@ pre-commit run --all-files
 # Reinstall/update git hooks
 pre-commit install -t pre-commit -t pre-push
 
-# Run ruff linting
+# Run ruff linting & formatting checks
 uv run ruff check scripts/ tests/
-
-# Run ruff formatting check
 uv run ruff format --check scripts/ tests/
+
+# Run shell formatter & linter
+shfmt -d -i 2 -ci scripts/*.sh *.sh
+shellcheck scripts/*.sh *.sh
 
 # Run unit tests
 uv run pytest
