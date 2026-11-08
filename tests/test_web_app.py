@@ -19,7 +19,7 @@ except ImportError:
 # Ensure scripts dir is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from web_app import clean_ansi, handle_status
+from web_app import clean_ansi, handle_status, init_sqlite_db, run_agy_agent
 
 
 def test_clean_ansi():
@@ -44,6 +44,7 @@ def test_handle_status_unconfigured():
         assert "Wanderlog" in status
         assert "Booking.com" in status
         assert "Antigravity CLI" in status
+        assert "Chat Persistence" in status
 
 
 def test_handle_status_configured():
@@ -62,6 +63,81 @@ def test_handle_status_configured():
         assert "✅ **Anthropic Claude**: API key active" in status
         assert "✅ **DeepSeek**: API key active" in status
         assert "✅ **GitHub CLI (`gh`)**: Token configured" in status
+        assert "Chat Persistence" in status
+
+
+def test_sqlite_db_init(tmp_path):
+    """Verify that init_sqlite_db initializes all required Chainlit tables."""
+    import sqlite3
+
+    test_db = tmp_path / "test_chainlit.db"
+    init_sqlite_db(test_db)
+    assert test_db.exists()
+
+    with sqlite3.connect(str(test_db)) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = {row[0] for row in cursor.fetchall()}
+
+    expected_tables = {"users", "threads", "steps", "elements", "feedbacks"}
+    assert expected_tables.issubset(tables)
+
+
+def test_run_agy_agent_command_construction():
+    """Verify agy is invoked with -p and --output-format stream-json."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    import web_app
+
+    captured_cmds = []
+
+    async def fake_create_subprocess_exec(*cmd, **kwargs):
+        captured_cmds.append(list(cmd))
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.wait = AsyncMock(return_value=0)
+        # Mock stdout lines (stream-json format)
+        lines = [
+            b'{"event":"init","conversation_id":"test-conv-123"}\n',
+            b'{"event":"step_update","step_update":{"step_type":"agent_response","text_delta":"Hello world!"}}\n',
+            b'{"event":"result","result":{"status":"SUCCESS","response":"Hello world!"}}\n',
+            b"",
+        ]
+        mock_proc.stdout.readline = AsyncMock(side_effect=lines)
+        mock_proc.stderr.readline = AsyncMock(side_effect=[b""])
+        return mock_proc
+
+    mock_msg = MagicMock()
+    mock_msg.send = AsyncMock()
+    mock_msg.stream_token = AsyncMock()
+    mock_msg.update = AsyncMock()
+
+    mock_step = MagicMock()
+    mock_step.__aenter__ = AsyncMock(return_value=mock_step)
+    mock_step.__aexit__ = AsyncMock(return_value=None)
+
+    session_store = {}
+    mock_cl = MagicMock()
+    mock_cl.Message = MagicMock(return_value=mock_msg)
+    mock_cl.Step = MagicMock(return_value=mock_step)
+    mock_cl.user_session.get = MagicMock(side_effect=session_store.get)
+    mock_cl.user_session.set = MagicMock(side_effect=session_store.__setitem__)
+
+    with patch.object(web_app, "cl", mock_cl):
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_create_subprocess_exec):
+            with patch("shutil.which", return_value="/usr/local/bin/agy"):
+                asyncio.run(run_agy_agent("Hello"))
+
+    assert len(captured_cmds) == 1
+    cmd = captured_cmds[0]
+    assert cmd[0] == "agy"
+    assert "--dangerously-skip-permissions" in cmd
+    assert "-p" in cmd
+    assert cmd[cmd.index("-p") + 1] == "Hello"
+    assert "--output-format" in cmd
+    assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+    assert session_store.get("agy_conversation_id") == "test-conv-123"
+    assert mock_msg.stream_token.call_count > 0
 
 
 if __name__ == "__main__":
@@ -69,4 +145,5 @@ if __name__ == "__main__":
     test_clean_ansi_plain_text()
     test_handle_status_unconfigured()
     test_handle_status_configured()
+    test_run_agy_agent_command_construction()
     print("All web_app tests passed successfully!")

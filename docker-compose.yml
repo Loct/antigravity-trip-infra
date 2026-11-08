@@ -42,6 +42,9 @@ services:
       - booking_data:/root/.config/booking
       - agoda_data:/root/.config/agoda
       - apify_data:/root/.config/apify
+    networks:
+      - default
+      - proxy_net
 
 volumes:
   gemini_data:
@@ -60,3 +63,8 @@ volumes:
     driver: local
   apify_data:
     driver: local
+networks:
+  default:
+  proxy_net:
+    name: ${PROXY_NETWORK_NAME:-nas-docker-compose_default}
+    external: true
