@@ -102,6 +102,8 @@ CREATE TABLE IF NOT EXISTS steps (
     "language" TEXT,
     "indent" INT,
     "defaultOpen" BOOLEAN,
+    "autoCollapse" BOOLEAN,
+    "icon" TEXT,
     "modes" TEXT,
     FOREIGN KEY ("threadId") REFERENCES threads("id") ON DELETE CASCADE
 );
@@ -137,12 +139,30 @@ CREATE TABLE IF NOT EXISTS feedbacks (
 
 
 def init_sqlite_db(db_path: str | Path) -> None:
-    """Initialize SQLite database with required Chainlit tables and adapters."""
+    """Initialize SQLite database with required Chainlit tables and run migrations."""
     path = Path(db_path).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     sqlite3.register_adapter(list, json.dumps)
     with sqlite3.connect(str(path)) as conn:
         conn.executescript(CHAINLIT_SQLITE_SCHEMA)
+        # Migrate existing tables if columns are missing from earlier schema versions
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(steps);")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        missing_cols = {
+            "defaultOpen": "BOOLEAN",
+            "autoCollapse": "BOOLEAN",
+            "icon": "TEXT",
+            "modes": "TEXT",
+            "indent": "INT",
+        }
+        for col, col_type in missing_cols.items():
+            if col not in existing_cols:
+                try:
+                    cursor.execute(f'ALTER TABLE steps ADD COLUMN "{col}" {col_type};')
+                except sqlite3.OperationalError:
+                    pass
+        conn.commit()
 
 
 # ----------------------------------------------------------------------
@@ -152,9 +172,13 @@ AUTH_PASSWORD = os.getenv("WEB_AUTH_PASSWORD", "").strip()
 
 if cl is not None:
     if not os.getenv("CHAINLIT_AUTH_SECRET"):
-        import secrets
+        secret_file = Path("/root/.gemini/antigravity-cli/.chainlit_secret")
+        if secret_file.exists():
+            os.environ["CHAINLIT_AUTH_SECRET"] = secret_file.read_text().strip()
+        else:
+            import secrets
 
-        os.environ["CHAINLIT_AUTH_SECRET"] = secrets.token_hex(32)
+            os.environ["CHAINLIT_AUTH_SECRET"] = secrets.token_hex(32)
 
     @cl.password_auth_callback
     def authenticate(username: str, password: str) -> Optional[cl.User]:
@@ -235,8 +259,28 @@ This interface lets you collaborate on travel planning with:
     @cl.on_chat_resume
     async def on_chat_resume(thread: Dict[str, Any]) -> None:
         """Resume an existing chat thread from persistent history."""
-        cl.user_session.set("history", thread.get("messages", []))
-        cl.user_session.set("agy_conversation_id", thread.get("metadata", {}).get("agy_conversation_id"))
+        resume_chat_thread(thread)
+
+
+def parse_thread_metadata(metadata: Any) -> Dict[str, Any]:
+    """Parse thread metadata safely whether dict or serialized JSON string."""
+    if isinstance(metadata, str):
+        try:
+            return json.loads(metadata) if metadata.strip() else {}
+        except Exception:
+            return {}
+    elif isinstance(metadata, dict):
+        return metadata
+    return {}
+
+
+def resume_chat_thread(thread: Dict[str, Any]) -> None:
+    """Extract and restore session state when resuming a chat thread."""
+    if cl is None:
+        return
+    cl.user_session.set("history", thread.get("steps") or thread.get("messages") or [])
+    meta = parse_thread_metadata(thread.get("metadata"))
+    cl.user_session.set("agy_conversation_id", meta.get("agy_conversation_id"))
 
 
 # ----------------------------------------------------------------------

@@ -19,7 +19,14 @@ except ImportError:
 # Ensure scripts dir is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from web_app import clean_ansi, handle_status, init_sqlite_db, run_agy_agent
+from web_app import (
+    clean_ansi,
+    handle_status,
+    init_sqlite_db,
+    parse_thread_metadata,
+    resume_chat_thread,
+    run_agy_agent,
+)
 
 
 def test_clean_ansi():
@@ -67,7 +74,7 @@ def test_handle_status_configured():
 
 
 def test_sqlite_db_init(tmp_path):
-    """Verify that init_sqlite_db initializes all required Chainlit tables."""
+    """Verify that init_sqlite_db initializes all required Chainlit tables and columns."""
     import sqlite3
 
     test_db = tmp_path / "test_chainlit.db"
@@ -78,9 +85,84 @@ def test_sqlite_db_init(tmp_path):
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = {row[0] for row in cursor.fetchall()}
+        cursor.execute("PRAGMA table_info(steps);")
+        step_cols = {row[1] for row in cursor.fetchall()}
 
     expected_tables = {"users", "threads", "steps", "elements", "feedbacks"}
     assert expected_tables.issubset(tables)
+    assert "autoCollapse" in step_cols
+    assert "icon" in step_cols
+    assert "defaultOpen" in step_cols
+
+
+def test_sqlite_db_migration(tmp_path):
+    """Verify that init_sqlite_db migrates older steps table without autoCollapse or icon."""
+    import sqlite3
+
+    test_db = tmp_path / "legacy_chainlit.db"
+    # Create older schema without autoCollapse or icon
+    with sqlite3.connect(str(test_db)) as conn:
+        conn.execute("""
+            CREATE TABLE steps (
+                "id" TEXT PRIMARY KEY,
+                "name" TEXT NOT NULL,
+                "type" TEXT NOT NULL,
+                "threadId" TEXT NOT NULL
+            );
+        """)
+        conn.commit()
+
+    # Run init_sqlite_db migration
+    init_sqlite_db(test_db)
+
+    with sqlite3.connect(str(test_db)) as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(steps);")
+        cols = {row[1] for row in cursor.fetchall()}
+
+    assert "autoCollapse" in cols
+    assert "icon" in cols
+    assert "defaultOpen" in cols
+
+
+def test_parse_thread_metadata():
+    """Verify safe parsing of thread metadata from various formats."""
+    assert parse_thread_metadata('{"agy_conversation_id": "conv-1"}') == {"agy_conversation_id": "conv-1"}
+    assert parse_thread_metadata({"agy_conversation_id": "conv-2"}) == {"agy_conversation_id": "conv-2"}
+    assert parse_thread_metadata("") == {}
+    assert parse_thread_metadata("invalid json") == {}
+    assert parse_thread_metadata(None) == {}
+
+
+def test_resume_chat_thread():
+    """Verify resume_chat_thread restores user session without throwing AttributeError."""
+    from unittest.mock import MagicMock
+
+    import web_app
+
+    session_store = {}
+    mock_cl = MagicMock()
+    mock_cl.user_session.set = MagicMock(side_effect=session_store.__setitem__)
+
+    with patch.object(web_app, "cl", mock_cl):
+        # Case 1: metadata is a raw string (as returned from SQLite)
+        thread_raw_meta = {
+            "id": "thread-1",
+            "metadata": '{"agy_conversation_id": "conv-sqlite-123"}',
+            "steps": [{"id": "s1", "output": "hi"}],
+        }
+        resume_chat_thread(thread_raw_meta)
+        assert session_store.get("agy_conversation_id") == "conv-sqlite-123"
+        assert len(session_store.get("history", [])) == 1
+
+        # Case 2: metadata is a dict
+        thread_dict_meta = {
+            "id": "thread-2",
+            "metadata": {"agy_conversation_id": "conv-dict-456"},
+            "steps": [],
+        }
+        resume_chat_thread(thread_dict_meta)
+        assert session_store.get("agy_conversation_id") == "conv-dict-456"
 
 
 def test_run_agy_agent_command_construction():
