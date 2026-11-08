@@ -7,12 +7,17 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
+    ports:
+      - "${WEB_PORT:-8000}:${WEB_PORT:-8000}"
     environment:
       - WANDERLOG_AUTH_SESSION_COOKIE=${WANDERLOG_AUTH_SESSION_COOKIE:-}
       - WANDERLOG_AUTH_SESSION_XSRF_TOKEN=${WANDERLOG_AUTH_SESSION_XSRF_TOKEN:-}
       - WANDERLOG_DISABLE_KEYCHAIN=1
       - ENABLE_REMOTE_CONTROL=${ENABLE_REMOTE_CONTROL:-true}
       - REMOTE_CONTROL_HOSTNAME=${REMOTE_CONTROL_HOSTNAME:-}
+      - ENABLE_WEB_UI=${ENABLE_WEB_UI:-true}
+      - WEB_PORT=${WEB_PORT:-8000}
+      - WEB_AUTH_PASSWORD=${WEB_AUTH_PASSWORD:-}
       - GH_TOKEN=${GH_TOKEN:-${GITHUB_TOKEN:-}}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-${GH_TOKEN:-}}
       - GIT_USER_NAME=${GIT_USER_NAME:-}
@@ -37,6 +42,9 @@ services:
       - booking_data:/root/.config/booking
       - agoda_data:/root/.config/agoda
       - apify_data:/root/.config/apify
+    networks:
+      - default
+      - proxy_net
 
 volumes:
   gemini_data:
@@ -55,3 +63,8 @@ volumes:
     driver: local
   apify_data:
     driver: local
+networks:
+  default:
+  proxy_net:
+    name: ${PROXY_NETWORK_NAME:-nas-docker-compose_default}
+    external: true

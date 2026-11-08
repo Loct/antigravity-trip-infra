@@ -1,0 +1,32 @@
+[meta]
+generated_by = "2.12.0"
+
+[project]
+# Whether to enable telemetry
+enable_telemetry = false
+# Session timeout in seconds (default: 3600)
+session_timeout = 7200
+# User environment variables to prompt for (optional)
+user_env = []
+
+[features]
+# Spontaneous file upload
+[features.spontaneous_file_upload]
+enabled = true
+max_size_mb = 50
+
+# Speech to text
+[features.audio]
+enabled = false
+
+[UI]
+# Name of the assistant
+name = "Wanderlog Travel Agent"
+# Description shown in the header
+description = "Plan trips, search lodging with Genius discounts, and consult the AI Travel Council"
+# Default theme (dark or light)
+default_theme = "dark"
+# Layout (wide or centered)
+layout = "wide"
+# Whether to show the readme at startup
+show_readme_at_startup = false

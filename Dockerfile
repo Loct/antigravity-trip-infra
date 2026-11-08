@@ -72,5 +72,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Environment variables
 ENV PATH="/usr/local/bin:/root/.local/bin:${PATH}"
 
+# Expose Web UI port
+EXPOSE 8000
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["daemon"]
