@@ -43,14 +43,14 @@ err_console = Console(stderr=True)
 
 
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", os.getenv("AGODA_CURRENCY", "EUR"))
-_raw_vip = os.getenv("AGODA_VIP_LEVEL", "4").strip().lower()
+_raw_vip = os.getenv("AGODA_VIP_LEVEL", "auto").strip().lower()
 if _raw_vip in ("auto", "personal"):
     DEFAULT_VIP_LEVEL: Any = "auto"
 else:
     try:
         DEFAULT_VIP_LEVEL = int(_raw_vip)
     except ValueError:
-        DEFAULT_VIP_LEVEL = 4
+        DEFAULT_VIP_LEVEL = "auto"
 
 VIP_DISCOUNT_RATES = {
     1: 0.05,  # VIP Bronze: ~5%
@@ -385,12 +385,14 @@ def detect_personal_account_tier(
         member_id = jwt_data.get("m") or jwt_data.get("sub")
         if member_id:
             account_id = f"Member #{member_id}"
-        if tier_level is None:
-            raw_vip = os.getenv("AGODA_VIP_LEVEL", "4")
-            try:
-                tier_level = int(raw_vip)
-            except ValueError:
-                tier_level = 4
+        for k in ["vipStatus", "vipTier", "vip_level", "loyaltyTier", "tier", "vip"]:
+            if k in jwt_data:
+                val = jwt_data[k]
+                if str(val).isdigit() and int(val) in VIP_DISCOUNT_RATES:
+                    tier_level = int(val)
+                elif str(val).lower() in ("platinum", "gold", "silver", "bronze"):
+                    name_map = {"bronze": 1, "silver": 2, "gold": 3, "platinum": 4}
+                    tier_level = name_map.get(str(val).lower())
 
     # 2. Regex inspection of cookie string
     if tier_level is None:
@@ -550,8 +552,12 @@ class AgodaConfig:
                 self.detected_vip_tier = detected_name
             else:
                 self.prompt_personal_account_setup = True
-                # Fallback to VIP Platinum (4) or static level if defined
-                self.vip_level = 4
+                if personal_account and not self.session_cookie:
+                    self.vip_level = 4
+                elif resolved_vip is not None and str(resolved_vip).isdigit():
+                    self.vip_level = int(resolved_vip)
+                else:
+                    self.vip_level = 0
         else:
             try:
                 self.vip_level = int(resolved_vip)

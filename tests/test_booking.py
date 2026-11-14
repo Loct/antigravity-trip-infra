@@ -24,6 +24,7 @@ from booking import (
     add_lodging_to_wanderlog,
     apply_genius_discounts,
     build_booking_hotel_url,
+    detect_genius_tier,
     print_booking_cookie_feedback,
     run_status_check,
     search_hotels,
@@ -414,6 +415,60 @@ def test_print_booking_cookie_feedback():
     # Ensure feedback renders cleanly for all status types without error
     for status_type in ["expired", "challenge", "unavailable", "network_error"]:
         print_booking_cookie_feedback(status_type, details="Test details")
+
+
+def test_detect_genius_tier_from_cookie_regex():
+    tier, name, user = detect_genius_tier("genius_level=2; user_email=traveler%40test.com")
+    assert tier == 2
+    assert name == "Genius Level 2"
+    assert user == "traveler@test.com"
+
+
+def test_detect_genius_tier_from_base64_payload():
+    import base64
+
+    payload = json.dumps({"genius_level": 3, "email": "vip_user@example.com"}).encode("utf-8")
+    b64_cookie = f"bkng_sso_session={base64.b64encode(payload).decode('utf-8')}"
+    tier, name, user = detect_genius_tier(b64_cookie)
+    assert tier == 3
+    assert name == "Genius Level 3"
+    assert user == "vip_user@example.com"
+
+
+def test_detect_genius_tier_from_endpoint():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = '<div data-genius-level="2"></div><span data-testid="header-user-avatar" title="Jane Doe"></span>'
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        tier, name, user = detect_genius_tier("bkng_sso_session=session_123")
+        assert tier == 2
+        assert name == "Genius Level 2"
+        assert user == "Jane Doe"
+
+
+def test_booking_config_auto_detection():
+    cfg = BookingConfig(
+        session_cookie="genius_tier=1; user_name=Alice",
+        personal_account=True,
+    )
+    assert cfg.personal_account_detected is True
+    assert cfg.personal_account_id == "Alice"
+    assert cfg.detected_genius_tier == "Genius Level 1"
+    assert cfg.genius_level == 1
+    assert cfg.prompt_personal_account_setup is False
+
+
+def test_booking_config_prompt_needed():
+    cfg = BookingConfig(session_cookie="", personal_account=True)
+    assert cfg.personal_account_detected is False
+    assert cfg.prompt_personal_account_setup is True
+    assert cfg.genius_level == 0
 
 
 if __name__ == "__main__":

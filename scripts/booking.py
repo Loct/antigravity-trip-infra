@@ -38,11 +38,24 @@ err_console = Console(stderr=True)
 
 
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", os.getenv("BOOKING_CURRENCY", "EUR"))
-DEFAULT_GENIUS_LEVEL = int(os.getenv("GENIUS_LEVEL", os.getenv("BOOKING_GENIUS_LEVEL", "3")))
+_raw_genius = os.getenv("GENIUS_LEVEL", os.getenv("BOOKING_GENIUS_LEVEL", "auto")).strip().lower()
+if _raw_genius in ("auto", "personal"):
+    DEFAULT_GENIUS_LEVEL: Any = "auto"
+else:
+    try:
+        DEFAULT_GENIUS_LEVEL = int(_raw_genius)
+    except ValueError:
+        DEFAULT_GENIUS_LEVEL = "auto"
+
 GENIUS_DISCOUNT_RATES = {
     1: 0.10,  # Level 1: 10%
     2: 0.15,  # Level 2: 15%
     3: 0.20,  # Level 3: 20%
+}
+GENIUS_TIER_NAMES = {
+    1: "Genius Level 1",
+    2: "Genius Level 2",
+    3: "Genius Level 3",
 }
 _UNSET = object()
 
@@ -250,10 +263,157 @@ def verify_booking_session(
         return False, "network_error", f"Verification failed: {e}"
 
 
+def parse_booking_jwt(token_str: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Attempt to decode JWT token payload or base64 JSON from Booking cookie string."""
+    if not token_str or not str(token_str).strip():
+        return None
+    s = str(token_str).strip()
+    # 1. Standard 3-part JWT
+    m = re.search(
+        r"(?:bkng_sso_session=|bkng_sso_auth=)?(eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)",
+        s,
+    )
+    if m:
+        parts = m.group(1).split(".")
+        if len(parts) == 3:
+            try:
+                import base64
+
+                payload = parts[1] + "=" * (-len(parts[1]) % 4)
+                return json.loads(base64.urlsafe_b64decode(payload.encode("utf-8")))
+            except Exception:
+                pass
+
+    # 2. Base64 JSON (e.g. bkng_sso_session=eyJ...)
+    m_b64 = re.search(
+        r"(?:bkng_sso_session=|bkng=)?(eyJ[a-zA-Z0-9_-]+={0,2})",
+        s,
+    )
+    if m_b64:
+        try:
+            import base64
+
+            payload = m_b64.group(1) + "=" * (-len(m_b64.group(1)) % 4)
+            data = json.loads(base64.urlsafe_b64decode(payload.encode("utf-8")))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    return None
+
+
+def detect_genius_tier(
+    session_cookie: Optional[str],
+    timeout: float = 4.0,
+    client: Optional[httpx.Client] = None,
+) -> Tuple[Optional[int], Optional[str], Optional[str]]:
+    """
+    Detect Genius loyalty tier (1, 2, or 3) and account details from Booking.com session cookie.
+    Returns: (genius_level [1..3 or None], tier_name, account_identifier)
+    """
+    if not session_cookie or not session_cookie.strip():
+        return None, None, None
+
+    cookie_str = session_cookie.strip()
+    tier_level: Optional[int] = None
+    account_id: Optional[str] = None
+
+    # 1. Inspection of decoded payload / cookie tokens
+    data = parse_booking_jwt(cookie_str)
+    if data:
+        for k in ["genius_level", "geniusLevel", "genius_tier", "genius"]:
+            if k in data:
+                try:
+                    val = int(data[k])
+                    if val in GENIUS_DISCOUNT_RATES:
+                        tier_level = val
+                except (ValueError, TypeError):
+                    pass
+        raw_user = data.get("email") or data.get("user_name") or data.get("userName")
+        if raw_user:
+            account_id = str(raw_user).strip()
+        elif "booking_global" in data and isinstance(data["booking_global"], list) and len(data["booking_global"]) > 0:
+            hint = data["booking_global"][0].get("login_hint")
+            if hint:
+                account_id = f"Account ({hint[:10]}...)" if len(str(hint)) > 15 else str(hint)
+
+    # 2. Regex inspection of cookie string
+    if tier_level is None:
+        m_level = re.search(r"(?:genius_level|user_genius_level|genius_tier|genius)=(\d)", cookie_str, re.IGNORECASE)
+        if m_level:
+            try:
+                val = int(m_level.group(1))
+                if val in GENIUS_DISCOUNT_RATES:
+                    tier_level = val
+            except ValueError:
+                pass
+
+    if account_id is None:
+        m_user = re.search(r"(?:user_email|email|user_name|login_name)=([^;]+)", cookie_str, re.IGNORECASE)
+        if m_user:
+            account_id = urllib.parse.unquote(m_user.group(1).strip())
+
+    # 3. Query Booking.com authenticated account endpoints if session cookie is present and tier is unknown
+    if tier_level is None and any(ind in cookie_str.lower() for ind in ["bkng_sso", "bkng", "session"]):
+        cookie_header = cookie_str if "=" in cookie_str else f"bkng_sso_session={cookie_str}"
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Cookie": cookie_header,
+            "Referer": "https://www.booking.com/",
+        }
+
+        def _check_endpoint(c: httpx.Client, endpoint: str) -> None:
+            nonlocal tier_level, account_id
+            try:
+                r = c.get(endpoint, headers=headers)
+                if r.status_code == 200:
+                    html = r.text
+                    if tier_level is None:
+                        m_g = re.search(
+                            r'(?:data-genius-level=["\'](\d)["\']|"genius_level":\s*(\d)|Genius [Ll]evel\s*(\d))',
+                            html,
+                        )
+                        if m_g:
+                            v_str = m_g.group(1) or m_g.group(2) or m_g.group(3)
+                            if v_str and int(v_str) in GENIUS_DISCOUNT_RATES:
+                                tier_level = int(v_str)
+                    if account_id is None:
+                        m_u = re.search(r'data-testid=["\']header-user-avatar["\'][^>]*title=["\']([^"\']+)["\']', html)
+                        if m_u:
+                            account_id = m_u.group(1).strip()
+            except Exception:
+                pass
+
+        for ep in [
+            "https://secure.booking.com/myreservations.html",
+            "https://secure.booking.com/myprofile.html",
+        ]:
+            if tier_level is not None and account_id is not None:
+                break
+            try:
+                if client is not None:
+                    _check_endpoint(client, ep)
+                else:
+                    with httpx.Client(timeout=timeout, follow_redirects=True) as local_c:
+                        _check_endpoint(local_c, ep)
+            except Exception:
+                pass
+
+    tier_name = GENIUS_TIER_NAMES.get(tier_level) if tier_level else None
+    return tier_level, tier_name, account_id
+
+
 class BookingConfig:
     def __init__(
         self,
         session_cookie: Any = _UNSET,
+        genius_level: Any = _UNSET,
+        personal_account: bool = False,
         **kwargs: Any,
     ):
         if session_cookie == "":
@@ -262,6 +422,36 @@ class BookingConfig:
             self.session_cookie = session_cookie
         else:
             self.session_cookie = self._resolve_session_cookie()
+
+        # Resolve Genius level & Account auto-detection
+        resolved_genius = genius_level if genius_level is not _UNSET else DEFAULT_GENIUS_LEVEL
+        auto_genius = (
+            personal_account
+            or str(resolved_genius).lower() in ("auto", "personal")
+            or os.getenv("BOOKING_AUTO_DETECT_GENIUS", "").lower() in ("1", "true", "yes")
+        )
+
+        self.personal_account_detected = False
+        self.personal_account_id: Optional[str] = None
+        self.detected_genius_tier: Optional[str] = None
+        self.prompt_personal_account_setup = False
+
+        if auto_genius:
+            detected_tier, detected_name, account_id = detect_genius_tier(self.session_cookie)
+            if detected_tier is not None:
+                self.genius_level = detected_tier
+                self.personal_account_detected = True
+                self.personal_account_id = account_id
+                self.detected_genius_tier = detected_name
+            else:
+                self.prompt_personal_account_setup = True
+                # When auto-detecting from personal account, apply discount strictly based on the cookie
+                self.genius_level = 0
+        else:
+            try:
+                self.genius_level = int(resolved_genius)
+            except (ValueError, TypeError):
+                self.genius_level = 0
 
     def _resolve_session_cookie(self) -> Optional[str]:
         for var in ["BOOKING_SESSION_COOKIE", "BOOKING_COM_COOKIES", "BOOKING_COOKIE"]:
@@ -491,12 +681,40 @@ def search_hotels(
     rooms: int = 1,
     currency: str = DEFAULT_CURRENCY,
     limit: int = 10,
-    genius_level: int = DEFAULT_GENIUS_LEVEL,
+    genius_level: Any = _UNSET,
+    personal_account: bool = False,
     config: Optional[BookingConfig] = None,
     **kwargs: Any,
 ) -> Tuple[List[Hotel], str]:
     """Execute hotel search using authenticated Booking.com session cookie."""
-    cfg = config or BookingConfig()
+    if config is None:
+        cfg = BookingConfig(
+            genius_level=genius_level if genius_level is not _UNSET else DEFAULT_GENIUS_LEVEL,
+            personal_account=personal_account,
+        )
+    elif personal_account:
+        cfg = BookingConfig(
+            session_cookie=config.session_cookie,
+            genius_level="auto",
+            personal_account=True,
+        )
+    elif genius_level is not _UNSET:
+        cfg = config
+        try:
+            cfg.genius_level = int(genius_level)
+        except (ValueError, TypeError):
+            if str(genius_level).lower() in ("auto", "personal"):
+                detected_tier, detected_name, acct_id = detect_genius_tier(cfg.session_cookie)
+                cfg.genius_level = detected_tier if detected_tier is not None else 0
+                cfg.personal_account_detected = bool(detected_tier is not None)
+                cfg.detected_genius_tier = detected_name
+                cfg.personal_account_id = acct_id
+            else:
+                cfg.genius_level = 0
+    else:
+        cfg = config
+
+    effective_genius = cfg.genius_level
 
     results = search_scrape(
         location=location,
@@ -508,8 +726,8 @@ def search_hotels(
         limit=limit,
         config=cfg,
     )
-    if results:
-        apply_genius_discounts(results, genius_level)
+    if results and effective_genius > 0:
+        apply_genius_discounts(results, effective_genius)
     return results, "Cookie Session (Booking.com)"
 
 
@@ -721,20 +939,32 @@ def run_status_check(config: BookingConfig, live_verify: bool = True) -> None:
         )
         cookie_feedback_type = "unavailable"
 
-    # 2. Genius Loyalty
-    genius_lvl = int(os.getenv("GENIUS_LEVEL", os.getenv("BOOKING_GENIUS_LEVEL", str(DEFAULT_GENIUS_LEVEL))))
-    if genius_lvl > 0:
-        disc = int(GENIUS_DISCOUNT_RATES.get(genius_lvl, 0.20) * 100)
+    # 2. Genius Loyalty & Account Tier Detection
+    if config.personal_account_detected:
+        disc = int(GENIUS_DISCOUNT_RATES.get(config.genius_level, 0.20) * 100)
         table.add_row(
             "Genius Loyalty",
-            f"[bold green]Level {genius_lvl}[/bold green]",
-            f"Active: -{disc}% discount applied to searches (GENIUS_LEVEL={genius_lvl})",
+            f"[bold green]{config.detected_genius_tier}[/bold green]",
+            f"Auto-detected from personal account ({config.personal_account_id or 'Member'}): -{disc}% discount applied",
+        )
+    elif config.prompt_personal_account_setup:
+        table.add_row(
+            "Genius Loyalty",
+            "[yellow]Account Verification Needed[/yellow]",
+            "Log in via ./scripts/login_booking.sh to link account and auto-detect Genius tier (Current: Standard rate)",
+        )
+    elif config.genius_level > 0 and config.genius_level in GENIUS_DISCOUNT_RATES:
+        disc = int(GENIUS_DISCOUNT_RATES[config.genius_level] * 100)
+        table.add_row(
+            "Genius Loyalty",
+            f"[bold green]Level {config.genius_level}[/bold green]",
+            f"Manual setting: -{disc}% discount applied to searches (GENIUS_LEVEL={config.genius_level})",
         )
     else:
         table.add_row(
             "Genius Loyalty",
-            "[dim]Disabled[/dim]",
-            "Set GENIUS_LEVEL=3 in .env to apply 20% loyalty discounts",
+            "[dim]Standard / None[/dim]",
+            "No Genius discount applied (standard public rates)",
         )
 
     # 3. Wanderlog CLI
@@ -794,10 +1024,13 @@ def main() -> None:
     )
     search_p.add_argument(
         "--genius",
-        type=int,
-        choices=[0, 1, 2, 3],
-        default=DEFAULT_GENIUS_LEVEL,
-        help=f"Genius loyalty discount level (0=none, 1=10%%, 2=15%%, 3=20%%, default: {DEFAULT_GENIUS_LEVEL})",
+        default=str(DEFAULT_GENIUS_LEVEL),
+        help="Genius loyalty discount level: 0=none, 1=10%%, 2=15%%, 3=20%%, auto=auto-detect from personal account (default: %(default)s)",
+    )
+    search_p.add_argument(
+        "--personal-account",
+        action="store_true",
+        help="Use personal account session cookie to auto-detect Genius loyalty tier",
     )
     search_p.add_argument("--limit", type=int, default=10, help="Max results to display (default: 10)")
     search_p.add_argument(
@@ -832,6 +1065,8 @@ def main() -> None:
 
     config = BookingConfig(
         session_cookie=getattr(args, "session_cookie", None),
+        genius_level=getattr(args, "genius", None),
+        personal_account=getattr(args, "personal_account", False),
     )
 
     if args.subcommand == "status":
@@ -839,6 +1074,17 @@ def main() -> None:
         sys.exit(0)
 
     if args.subcommand == "search":
+        if config.personal_account_detected:
+            pct = int(GENIUS_DISCOUNT_RATES.get(config.genius_level, 0.20) * 100)
+            console.print(
+                f"[bold green]👤 Personal Account Connected:[/bold green] {config.personal_account_id or 'Booking Member'} "
+                f"({config.detected_genius_tier} Deal -{pct}% auto-applied)\n"
+            )
+        elif config.prompt_personal_account_setup and config.session_cookie:
+            console.print(
+                "[bold yellow]⚠️ Personal Account Unverified:[/bold yellow] Could not auto-detect Genius tier from session cookie. Standard rates applied.\n"
+            )
+
         # Calculate default dates if omitted
         today = datetime.date.today()
         check_in = args.check_in or (today + datetime.timedelta(days=14)).isoformat()
