@@ -1,11 +1,11 @@
 ---
 name: agoda
-description: Search and compare hotel and lodging accommodations via Agoda (using RapidAPI, Apify scraper actor, or direct web search) and add selected stays to Wanderlog trip itineraries.
+description: Search and compare hotel and lodging accommodations via Agoda (using RapidAPI, Apify scraper actor, or direct web search) with AgodaVIP loyalty discounts, and add selected stays to Wanderlog trip itineraries.
 ---
 
 # Agoda Lodging Search & Wanderlog Integration Skill
 
-This skill guides Antigravity on searching, filtering, and comparing hotel and lodging accommodations using Agoda, and linking selected stays to Wanderlog trip itineraries.
+This skill guides Antigravity on searching, filtering, and comparing hotel and lodging accommodations using Agoda, applying AgodaVIP loyalty discounts, and linking selected stays to Wanderlog trip itineraries.
 
 ---
 
@@ -32,9 +32,26 @@ The integration script (`scripts/agoda.py`) uses a **hybrid multi-provider strat
 
 ---
 
-## 2. Checking Status & Credentials
+## 2. AgodaVIP Loyalty Discounts & Valid URLs
 
-Check the current status of all Agoda providers and Wanderlog CLI:
+### AgodaVIP Loyalty Tiers
+Agoda provides VIP tiers with automatic discounts applied to hotel searches:
+- **Level 1 (VIP Bronze)**: ~5% discount
+- **Level 2 (VIP Silver)**: ~12% discount
+- **Level 3 (VIP Gold)**: ~18% discount
+- **Level 4 (VIP Platinum)**: ~25% discount *(Default)*
+- **Level 0**: Standard public pricing (no discount)
+
+Configured via `AGODA_VIP_LEVEL` in `.env` or `--vip <0-4>` CLI argument. When active, results highlight VIP discounted rates and savings badges alongside standard rates.
+
+### Valid Direct URL Requirements
+Never generate broken placeholder URLs such as `agoda.com/hotel/<id>.html`. The integration uses `build_agoda_hotel_url` to construct canonical URLs with pre-populated check-in/check-out dates, guest counts, room counts, and property search parameters.
+
+---
+
+## 3. Checking Status & Credentials
+
+Check the current status of all Agoda providers, VIP level, and Wanderlog CLI:
 
 ```bash
 uv run scripts/agoda.py status
@@ -47,7 +64,7 @@ To configure or update credentials, use the interactive wizard:
 
 ---
 
-## 3. Searching for Accommodations
+## 4. Searching for Accommodations
 
 Run `scripts/agoda.py search` with `uv run`:
 
@@ -57,7 +74,7 @@ Run `scripts/agoda.py search` with `uv run`:
 uv run scripts/agoda.py search -l "Tokyo"
 ```
 
-### Specific Dates & Guests
+### Specific Dates, Guests & VIP Level
 ```bash
 uv run scripts/agoda.py search \
   -l "Kyoto" \
@@ -65,6 +82,7 @@ uv run scripts/agoda.py search \
   -o 2026-11-05 \
   -g 2 \
   -c USD \
+  --vip 4 \
   --limit 10
 ```
 
@@ -79,9 +97,15 @@ uv run scripts/agoda.py search -l "Bangkok" --min-rating 8.5 --max-price 300
 uv run scripts/agoda.py search -l "Singapore" -f json
 ```
 
+### Web App Slash Command
+In the Chainlit web interface, search Agoda directly using:
+```text
+/agoda Tokyo 2026-12-01 2026-12-05
+```
+
 ---
 
-## 4. Multi-OTA Comparison (Agoda vs. Booking.com vs. Wanderlog)
+## 5. Multi-OTA Comparison (Agoda vs. Booking.com vs. Wanderlog)
 
 When the user asks for comparison across booking platforms:
 1. Search Agoda:

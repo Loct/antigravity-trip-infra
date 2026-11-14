@@ -21,6 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from web_app import (
     clean_ansi,
+    handle_agoda_search,
+    handle_booking_search,
     handle_status,
     init_sqlite_db,
     parse_thread_metadata,
@@ -50,6 +52,7 @@ def test_handle_status_unconfigured():
         assert "System & Authentication Status" in status
         assert "Wanderlog" in status
         assert "Booking.com" in status
+        assert "Agoda" in status
         assert "Antigravity CLI" in status
         assert "Chat Persistence" in status
 
@@ -59,6 +62,7 @@ def test_handle_status_configured():
     mock_env = {
         "WANDERLOG_AUTH_SESSION_COOKIE": "test_cookie",
         "BOOKING_SESSION_COOKIE": "test_bkng",
+        "AGODA_API_KEY": "test_agoda_key",
         "ANTHROPIC_API_KEY": "sk-ant-test",
         "OPENROUTER_API_KEY": "sk-or-test",
         "GH_TOKEN": "ghp_test",
@@ -67,6 +71,7 @@ def test_handle_status_configured():
         status = asyncio.run(handle_status())
         assert "✅ **Wanderlog**: Authenticated" in status
         assert "✅ **Booking.com**: Authenticated" in status
+        assert "✅ **Agoda**: API key configured" in status
         assert "✅ **Anthropic Claude**: API key active" in status
         assert "✅ **DeepSeek**: API key active" in status
         assert "✅ **GitHub CLI (`gh`)**: Token configured" in status
@@ -222,10 +227,90 @@ def test_run_agy_agent_command_construction():
     assert mock_msg.stream_token.call_count > 0
 
 
+def test_handle_agoda_search_command_construction():
+    """Verify handle_agoda_search builds correct CLI arguments with search and date flags."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    import web_app
+
+    captured_cmds = []
+
+    async def fake_subprocess_exec(*cmd, **kwargs):
+        captured_cmds.append(list(cmd))
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate = AsyncMock(return_value=(b"Mock Agoda output", b""))
+        return mock_proc
+
+    mock_step = MagicMock()
+    mock_step.__aenter__ = AsyncMock(return_value=mock_step)
+    mock_step.__aexit__ = AsyncMock(return_value=None)
+
+    mock_cl = MagicMock()
+    mock_cl.Step = MagicMock(return_value=mock_step)
+
+    with patch.object(web_app, "cl", mock_cl):
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+            res = asyncio.run(handle_agoda_search("Tokyo 2026-12-01 2026-12-05"))
+
+    assert "Mock Agoda output" in res
+    assert len(captured_cmds) == 1
+    cmd = captured_cmds[0]
+    assert "agoda.py" in cmd[2]
+    assert "search" in cmd
+    assert "-l" in cmd
+    assert cmd[cmd.index("-l") + 1] == "Tokyo"
+    assert "-i" in cmd
+    assert cmd[cmd.index("-i") + 1] == "2026-12-01"
+    assert "-o" in cmd
+    assert cmd[cmd.index("-o") + 1] == "2026-12-05"
+
+
+def test_handle_booking_search_command_construction():
+    """Verify handle_booking_search builds correct CLI arguments with search and date flags."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    import web_app
+
+    captured_cmds = []
+
+    async def fake_subprocess_exec(*cmd, **kwargs):
+        captured_cmds.append(list(cmd))
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate = AsyncMock(return_value=(b"Mock Booking output", b""))
+        return mock_proc
+
+    mock_step = MagicMock()
+    mock_step.__aenter__ = AsyncMock(return_value=mock_step)
+    mock_step.__aexit__ = AsyncMock(return_value=None)
+
+    mock_cl = MagicMock()
+    mock_cl.Step = MagicMock(return_value=mock_step)
+
+    with patch.object(web_app, "cl", mock_cl):
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+            res = asyncio.run(handle_booking_search("Kyoto 2026-12-01 2026-12-05"))
+
+    assert "Mock Booking output" in res
+    assert len(captured_cmds) == 1
+    cmd = captured_cmds[0]
+    assert "booking.py" in cmd[2]
+    assert "search" in cmd
+    assert "-l" in cmd
+    assert cmd[cmd.index("-l") + 1] == "Kyoto"
+    assert "-i" in cmd
+    assert cmd[cmd.index("-i") + 1] == "2026-12-01"
+    assert "-o" in cmd
+    assert cmd[cmd.index("-o") + 1] == "2026-12-05"
+
+
 if __name__ == "__main__":
     test_clean_ansi()
     test_clean_ansi_plain_text()
     test_handle_status_unconfigured()
     test_handle_status_configured()
     test_run_agy_agent_command_construction()
+    test_handle_agoda_search_command_construction()
+    test_handle_booking_search_command_construction()
     print("All web_app tests passed successfully!")

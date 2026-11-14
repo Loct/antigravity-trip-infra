@@ -311,7 +311,21 @@ async def handle_status() -> str:
     else:
         lines.append("- ℹ️ **Booking.com**: No session cookie set (standard public pricing)")
 
-    # 4. AI Council (Claude & DeepSeek)
+    # 4. Agoda
+    agoda_key = os.getenv("AGODA_API_KEY", "") or os.getenv("RAPIDAPI_KEY", "")
+    agoda_cookie = os.getenv("AGODA_SESSION_COOKIE", "")
+    apify_tok = os.getenv("APIFY_TOKEN", "")
+    agoda_vip = os.getenv("AGODA_VIP_LEVEL", "4")
+    if agoda_key:
+        lines.append(f"- ✅ **Agoda**: API key configured (AgodaVIP Level {agoda_vip})")
+    elif apify_tok:
+        lines.append(f"- ✅ **Agoda**: Apify scraper configured (AgodaVIP Level {agoda_vip})")
+    elif agoda_cookie:
+        lines.append(f"- ✅ **Agoda**: Authenticated via session cookie (AgodaVIP Level {agoda_vip})")
+    else:
+        lines.append(f"- ℹ️ **Agoda**: Direct web mode active (AgodaVIP Level {agoda_vip})")
+
+    # 5. AI Council (Claude & DeepSeek)
     claude_key = os.getenv("ANTHROPIC_API_KEY", "")
     deepseek_key = os.getenv("OPENROUTER_API_KEY", "") or os.getenv("DEEPSEEK_API_KEY", "")
     if claude_key:
@@ -374,11 +388,11 @@ async def handle_booking_search(args: str) -> str:
     checkin = parts[1] if len(parts) > 1 else None
     checkout = parts[2] if len(parts) > 2 else None
 
-    cmd = ["uv", "run", str(SCRIPT_DIR / "booking.py"), city]
+    cmd = ["uv", "run", str(SCRIPT_DIR / "booking.py"), "search", "-l", city]
     if checkin:
-        cmd.extend(["--checkin", checkin])
+        cmd.extend(["-i", checkin])
     if checkout:
-        cmd.extend(["--checkout", checkout])
+        cmd.extend(["-o", checkout])
 
     async with cl.Step(name=f"Searching Hotels in {city}", type="tool") as step:
         step.output = f"Executing: {' '.join(cmd)}"
@@ -401,6 +415,45 @@ async def handle_booking_search(args: str) -> str:
         except Exception as e:
             step.output = str(e)
             return f"⚠️ Error executing hotel search: {e}"
+
+
+async def handle_agoda_search(args: str) -> str:
+    """Execute Agoda lodging search via scripts/agoda.py."""
+    parts = args.strip().split()
+    if not parts:
+        return "⚠️ **Usage**: `/agoda <city> [checkin] [checkout]` (e.g. `/agoda Tokyo 2026-04-01 2026-04-05`)"
+
+    city = parts[0]
+    checkin = parts[1] if len(parts) > 1 else None
+    checkout = parts[2] if len(parts) > 2 else None
+
+    cmd = ["uv", "run", str(SCRIPT_DIR / "agoda.py"), "search", "-l", city]
+    if checkin:
+        cmd.extend(["-i", checkin])
+    if checkout:
+        cmd.extend(["-o", checkout])
+
+    async with cl.Step(name=f"Searching Agoda Lodging in {city}", type="tool") as step:
+        step.output = f"Executing: {' '.join(cmd)}"
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(WORKSPACE_DIR),
+            )
+            stdout, stderr = await proc.communicate()
+            output = clean_ansi(stdout.decode().strip() if stdout else "")
+            if proc.returncode == 0:
+                step.output = "Search completed successfully"
+                return f"### 🏨 Agoda Lodging Results for {city}\n\n{output}"
+            else:
+                err = clean_ansi(stderr.decode().strip() if stderr else "Search failed")
+                step.output = f"Failed with code {proc.returncode}"
+                return f"⚠️ **Agoda search error**:\n```text\n{err or output}\n```"
+        except Exception as e:
+            step.output = str(e)
+            return f"⚠️ Error executing Agoda search: {e}"
 
 
 async def handle_council_query(query: str) -> str:
@@ -589,6 +642,11 @@ if cl is not None:
 
             elif cmd in ("/hotel", "/booking"):
                 res = await handle_booking_search(args)
+                await cl.Message(content=res).send()
+                return
+
+            elif cmd == "/agoda":
+                res = await handle_agoda_search(args)
                 await cl.Message(content=res).send()
                 return
 

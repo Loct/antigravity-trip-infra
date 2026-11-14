@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -41,6 +42,19 @@ err_console = Console(stderr=True)
 
 
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", os.getenv("AGODA_CURRENCY", "EUR"))
+DEFAULT_VIP_LEVEL = int(os.getenv("AGODA_VIP_LEVEL", "4"))
+VIP_DISCOUNT_RATES = {
+    1: 0.05,  # VIP Bronze: ~5%
+    2: 0.12,  # VIP Silver: ~12%
+    3: 0.18,  # VIP Gold: ~18%
+    4: 0.25,  # VIP Platinum: ~25%
+}
+VIP_TIER_NAMES = {
+    1: "VIP Bronze",
+    2: "VIP Silver",
+    3: "VIP Gold",
+    4: "VIP Platinum",
+}
 _UNSET = object()
 
 
@@ -55,6 +69,10 @@ class Hotel:
     price_per_night: Optional[float] = None
     total_price: Optional[float] = None
     currency: str = DEFAULT_CURRENCY
+    vip_price: Optional[float] = None
+    vip_price_text: Optional[str] = None
+    is_vip_deal: bool = False
+    vip_discount_rate: float = 0.0
     address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -69,6 +87,59 @@ class Hotel:
         return dataclasses.asdict(self)
 
 
+def build_agoda_hotel_url(
+    name: str,
+    canonical_url: Optional[str] = None,
+    hotel_id: Optional[str] = None,
+    check_in: Optional[str] = None,
+    check_out: Optional[str] = None,
+    guests: int = 2,
+    rooms: int = 1,
+) -> str:
+    """Build a valid Agoda property URL or deep search link with populated travel dates and guests."""
+    params: Dict[str, str] = {}
+    if check_in and check_out:
+        params["checkIn"] = check_in
+        params["checkOut"] = check_out
+        params["adults"] = str(guests)
+        params["rooms"] = str(rooms)
+
+    # Avoid generating broken placeholder URLs like 'agoda.com/hotel/<id>.html'
+    if canonical_url and "agoda.com" in canonical_url and not re.search(r"agoda\.com/hotel/\d+\.html$", canonical_url):
+        base = canonical_url.split("?")[0]
+    elif hotel_id and str(hotel_id).isdigit():
+        base = "https://www.agoda.com/search"
+        params["hotel"] = str(hotel_id)
+        params["text"] = name
+    else:
+        base = "https://www.agoda.com/search"
+        params["text"] = name
+
+    if params:
+        return f"{base}?{urllib.parse.urlencode(params)}"
+    return base
+
+
+def apply_vip_discount(hotel: Hotel, vip_level: int = DEFAULT_VIP_LEVEL) -> Hotel:
+    """Apply AgodaVIP loyalty discount to a hotel result if applicable."""
+    if vip_level <= 0 or vip_level not in VIP_DISCOUNT_RATES:
+        return hotel
+
+    rate = VIP_DISCOUNT_RATES[vip_level]
+    vip_tier = VIP_TIER_NAMES.get(vip_level, f"VIP Level {vip_level}")
+
+    if hotel.total_price is not None and not hotel.is_vip_deal:
+        discounted = round(hotel.total_price * (1.0 - rate), 2)
+        hotel.vip_price = discounted
+        hotel.vip_price_text = f"{hotel.currency} {discounted:.2f}"
+        hotel.is_vip_deal = True
+        hotel.vip_discount_rate = rate
+        badge_text = f"{vip_tier} Deal (-{int(rate * 100)}%)"
+        if badge_text not in hotel.badges:
+            hotel.badges.insert(0, badge_text)
+    return hotel
+
+
 class AgodaConfig:
     def __init__(
         self,
@@ -77,6 +148,7 @@ class AgodaConfig:
         apify_token: Any = _UNSET,
         apify_actor: Optional[str] = None,
         session_cookie: Any = _UNSET,
+        vip_level: int = DEFAULT_VIP_LEVEL,
     ):
         if api_key == "":
             self.api_key = None
@@ -85,9 +157,11 @@ class AgodaConfig:
         else:
             self.api_key = self._resolve_api_key()
 
-        self.rapidapi_host = rapidapi_host or os.getenv(
-            "AGODA_RAPIDAPI_HOST",
-            os.getenv("RAPIDAPI_HOST", "agoda-com.p.rapidapi.com"),
+        self.rapidapi_host = (
+            rapidapi_host
+            or (os.getenv("AGODA_RAPIDAPI_HOST") or "").strip()
+            or (os.getenv("RAPIDAPI_HOST") or "").strip()
+            or "agoda-com.p.rapidapi.com"
         )
 
         if apify_token == "":
@@ -97,7 +171,7 @@ class AgodaConfig:
         else:
             self.apify_token = self._resolve_apify_token()
 
-        self.apify_actor = apify_actor or os.getenv("APIFY_AGODA_ACTOR", "tri_angle/agoda-scraper")
+        self.apify_actor = apify_actor or (os.getenv("APIFY_AGODA_ACTOR") or "").strip() or "tri_angle/agoda-scraper"
 
         if session_cookie == "":
             self.session_cookie = None
@@ -105,6 +179,8 @@ class AgodaConfig:
             self.session_cookie = session_cookie
         else:
             self.session_cookie = self._resolve_session_cookie()
+
+        self.vip_level = vip_level
 
     def _resolve_api_key(self) -> Optional[str]:
         # Check env vars
@@ -328,10 +404,14 @@ def search_rapidapi(
 
             lat = prop.get("latitude") or prop.get("lat")
             lng = prop.get("longitude") or prop.get("lng")
-            url = (
-                prop.get("url")
-                or prop.get("hotelUrl")
-                or (f"https://www.agoda.com/hotel/{hotel_id}.html" if hotel_id else "https://www.agoda.com")
+            url = build_agoda_hotel_url(
+                name=name,
+                canonical_url=prop.get("url") or prop.get("hotelUrl"),
+                hotel_id=hotel_id,
+                check_in=check_in,
+                check_out=check_out,
+                guests=guests,
+                rooms=rooms,
             )
             photo = prop.get("photo_url") or prop.get("image") or prop.get("photoUrl") or prop.get("main_photo_url")
             address = prop.get("address") or prop.get("neighborhood") or prop.get("city") or location
@@ -432,11 +512,14 @@ def search_apify(
         address = item.get("address") or item.get("neighborhood") or item.get("city") or location
         lat = item.get("lat") or item.get("latitude")
         lng = item.get("lng") or item.get("longitude")
-        url_link = (
-            item.get("hotelUrl")
-            or item.get("url")
-            or item.get("link")
-            or (f"https://www.agoda.com/hotel/{hotel_id}.html" if hotel_id else "https://www.agoda.com")
+        url_link = build_agoda_hotel_url(
+            name=name,
+            canonical_url=item.get("hotelUrl") or item.get("url") or item.get("link"),
+            hotel_id=hotel_id,
+            check_in=check_in,
+            check_out=check_out,
+            guests=guests,
+            rooms=rooms,
         )
 
         badges = []
@@ -552,7 +635,15 @@ def search_scrape(
 
                     lat = prop.get("latitude")
                     lng = prop.get("longitude")
-                    url = prop.get("propertyUrl") or f"https://www.agoda.com/hotel/{hotel_id}.html"
+                    url = build_agoda_hotel_url(
+                        name=name,
+                        canonical_url=prop.get("propertyUrl"),
+                        hotel_id=hotel_id,
+                        check_in=check_in,
+                        check_out=check_out,
+                        guests=guests,
+                        rooms=rooms,
+                    )
 
                     badges = []
                     if prop.get("isFreeCancellation"):
@@ -626,7 +717,16 @@ def search_scrape(
                         pass
 
             link_el = card.select_one("a[href]")
-            link = f"https://www.agoda.com{link_el['href']}" if link_el else "https://www.agoda.com"
+            raw_href = f"https://www.agoda.com{link_el['href']}" if link_el else None
+            link = build_agoda_hotel_url(
+                name=name,
+                canonical_url=raw_href,
+                hotel_id="",
+                check_in=check_in,
+                check_out=check_out,
+                guests=guests,
+                rooms=rooms,
+            )
 
             hotels.append(
                 Hotel(
@@ -656,35 +756,50 @@ def search_hotels(
     currency: str = DEFAULT_CURRENCY,
     limit: int = 10,
     provider: str = "auto",
+    vip_level: Optional[int] = None,
     config: Optional[AgodaConfig] = None,
 ) -> Tuple[List[Hotel], str]:
-    """Search hotels across Agoda providers with hybrid fallback."""
+    """Search hotels across Agoda providers with hybrid fallback and AgodaVIP discounting."""
     if config is None:
-        config = AgodaConfig()
+        config = AgodaConfig(vip_level=vip_level if vip_level is not None else DEFAULT_VIP_LEVEL)
+    elif vip_level is not None:
+        config.vip_level = vip_level
+
+    effective_vip = config.vip_level
+
+    def _finalize(items: List[Hotel], p_name: str) -> Tuple[List[Hotel], str]:
+        if effective_vip > 0:
+            items = [apply_vip_discount(h, effective_vip) for h in items]
+        return items, p_name
 
     provider = provider.lower()
     errors: List[str] = []
 
     # Direct provider routing
     if provider == "rapidapi":
-        return search_rapidapi(
-            location, check_in, check_out, guests, rooms, currency, limit, config
-        ), "RapidAPI (Agoda)"
+        return _finalize(
+            search_rapidapi(location, check_in, check_out, guests, rooms, currency, limit, config),
+            "RapidAPI (Agoda)",
+        )
 
     if provider == "apify":
-        return search_apify(
-            location, check_in, check_out, guests, rooms, currency, limit, config
-        ), f"Apify ({config.apify_actor})"
+        return _finalize(
+            search_apify(location, check_in, check_out, guests, rooms, currency, limit, config),
+            f"Apify ({config.apify_actor})",
+        )
 
     if provider == "scrape":
-        return search_scrape(location, check_in, check_out, guests, rooms, currency, limit, config), "Agoda Web"
+        return _finalize(
+            search_scrape(location, check_in, check_out, guests, rooms, currency, limit, config),
+            "Agoda Web",
+        )
 
     # Auto mode: RapidAPI -> Apify -> Scrape
     if config.api_key:
         try:
             results = search_rapidapi(location, check_in, check_out, guests, rooms, currency, limit, config)
             if results:
-                return results, "RapidAPI (Agoda)"
+                return _finalize(results, "RapidAPI (Agoda)")
         except Exception as e:
             errors.append(f"RapidAPI: {e}")
 
@@ -692,7 +807,7 @@ def search_hotels(
         try:
             results = search_apify(location, check_in, check_out, guests, rooms, currency, limit, config)
             if results:
-                return results, f"Apify ({config.apify_actor})"
+                return _finalize(results, f"Apify ({config.apify_actor})")
         except Exception as e:
             errors.append(f"Apify: {e}")
 
@@ -700,7 +815,7 @@ def search_hotels(
     try:
         results = search_scrape(location, check_in, check_out, guests, rooms, currency, limit, config)
         if results:
-            return results, "Agoda Web Fallback"
+            return _finalize(results, "Agoda Web Fallback")
     except Exception as e:
         errors.append(f"Direct Web: {e}")
 
@@ -708,7 +823,7 @@ def search_hotels(
         msg = "; ".join(errors)
         raise RuntimeError(
             f"All Agoda providers failed for location '{location}'. Details: {msg}\n"
-            "Tip: Run './scripts/login_agoda.sh' to configure AGODA_API_KEY or APIFY_TOKEN."
+            "Tip: Run './scripts/login_agoda.sh' to configure AGODA_API_KEY, APIFY_TOKEN, or AGODA_SESSION_COOKIE."
         )
 
     return [], "None"
@@ -737,7 +852,7 @@ def print_pretty_table(
     table.add_column("#", justify="right", style="cyan", width=3)
     table.add_column("Property Name", style="bold white", min_width=25)
     table.add_column("Rating", justify="center", width=12)
-    table.add_column("Total Price", justify="right", style="bold green", width=14)
+    table.add_column("Total Price", justify="right", style="bold green", width=16)
     table.add_column("Location / Badges", style="dim", min_width=25)
     table.add_column("Booking Link", style="blue underline", min_width=20)
 
@@ -760,10 +875,15 @@ def print_pretty_table(
         else:
             score_str = "[dim]N/A[/dim]"
 
-        # Price string
-        price_display = h.price_text or (
-            f"{h.currency} {h.total_price:.2f}" if h.total_price else "[dim]Check rate[/dim]"
-        )
+        # Price string with VIP deal highlight
+        if h.is_vip_deal and h.vip_price_text:
+            orig = h.price_text or (f"{h.currency} {h.total_price:.2f}" if h.total_price else "")
+            orig_str = f"\n[dim strike]{orig}[/dim strike]" if orig else ""
+            price_display = f"[bold green]{h.vip_price_text}[/bold green]{orig_str}"
+        else:
+            price_display = h.price_text or (
+                f"{h.currency} {h.total_price:.2f}" if h.total_price else "[dim]Check rate[/dim]"
+            )
 
         # Address & Badges
         loc_badges = []
@@ -774,7 +894,13 @@ def print_pretty_table(
         loc_display = "\n".join(loc_badges) if loc_badges else "[dim]N/A[/dim]"
 
         # URL
-        url_display = h.url or f"https://www.agoda.com/hotel/{h.hotel_id}.html"
+        url_display = h.url or build_agoda_hotel_url(
+            name=h.name,
+            hotel_id=h.hotel_id,
+            check_in=check_in,
+            check_out=check_out,
+            guests=guests,
+        )
 
         table.add_row(
             str(idx),
@@ -797,10 +923,14 @@ def add_lodging_to_wanderlog(
     Add selected Agoda lodging to a Wanderlog trip itinerary.
     Strictly enforces trip mutation confirmation rules.
     """
+    price_note = hotel.vip_price_text or hotel.price_text or "N/A"
+    if hotel.is_vip_deal and hotel.vip_price_text and hotel.price_text:
+        price_note = f"{hotel.vip_price_text} (AgodaVIP deal, standard: {hotel.price_text})"
+
     booking_notes = (
         f"Booked via Agoda.\n"
         f"Rating: {hotel.rating}/10 ({hotel.review_word or ''})\n"
-        f"Price: {hotel.price_text or 'N/A'}\n"
+        f"Price: {price_note}\n"
         f"URL: {hotel.url or 'N/A'}"
     )
 
@@ -830,7 +960,7 @@ def add_lodging_to_wanderlog(
                 f"• Trip Key:   [bold green]{trip_key}[/bold green]\n"
                 f"• Property:   [bold]{hotel.name}[/bold]\n"
                 f"• Dates:      {hotel.check_in} → {hotel.check_out}\n"
-                f"• Price:      {hotel.price_text or 'N/A'}\n"
+                f"• Price:      {price_note}\n"
                 f"• Address:    {hotel.address or 'N/A'}\n\n"
                 f"Execute command: [dim]{' '.join(cmd)}[/dim]",
                 title="Wanderlog Trip Mutation Confirmation",
@@ -908,7 +1038,23 @@ def run_status_check(config: AgodaConfig) -> None:
             "Optional: Set AGODA_SESSION_COOKIE for web access",
         )
 
-    # 4. Wanderlog CLI
+    # 4. AgodaVIP Loyalty
+    if config.vip_level > 0 and config.vip_level in VIP_DISCOUNT_RATES:
+        tier_name = VIP_TIER_NAMES.get(config.vip_level, f"VIP Level {config.vip_level}")
+        pct = int(VIP_DISCOUNT_RATES[config.vip_level] * 100)
+        table.add_row(
+            "AgodaVIP Loyalty",
+            f"[green]{tier_name}[/green]",
+            f"Active: -{pct}% discount applied to searches (AGODA_VIP_LEVEL={config.vip_level})",
+        )
+    else:
+        table.add_row(
+            "AgodaVIP Loyalty",
+            "[yellow]Standard[/yellow]",
+            "Level 0 (No VIP discount). Set AGODA_VIP_LEVEL=1..4 in .env for VIP rates",
+        )
+
+    # 5. Wanderlog CLI
     w_avail = subprocess.run(["which", "wanderlog"], capture_output=True).returncode == 0
     if w_avail:
         table.add_row(
@@ -960,6 +1106,13 @@ def main() -> None:
         default=DEFAULT_CURRENCY,
         help=f"Currency code (default: {DEFAULT_CURRENCY})",
     )
+    search_p.add_argument(
+        "--vip",
+        type=int,
+        choices=[0, 1, 2, 3, 4],
+        default=DEFAULT_VIP_LEVEL,
+        help="AgodaVIP loyalty discount level (0=none, 1=VIP Bronze 5%, 2=VIP Silver 12%, 3=VIP Gold 18%, 4=VIP Platinum 25%, default: 4)",
+    )
     search_p.add_argument("--limit", type=int, default=10, help="Max results to display (default: 10)")
     search_p.add_argument(
         "-p",
@@ -1007,6 +1160,7 @@ def main() -> None:
         api_key=getattr(args, "api_key", None),
         apify_token=getattr(args, "apify_token", None),
         session_cookie=getattr(args, "session_cookie", None),
+        vip_level=getattr(args, "vip", DEFAULT_VIP_LEVEL),
     )
 
     if args.subcommand == "status":
