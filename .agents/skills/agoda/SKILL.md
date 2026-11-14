@@ -129,7 +129,7 @@ When comparing across booking platforms:
    ```
 3. Check native Wanderlog Google lodging rates:
    - Call Wanderlog MCP tool `search_hotels` or `get_hotel_rates`.
-4. Synthesize results side-by-side in a comparative overview table with links, ratings, and rates per night.
+4. Synthesize results side-by-side in a comparative overview table with links, ratings, key amenities, and always display both the price per night in euros (€/night) and total price in euros (€ total) with loyalty discounts (Genius Lv3 vs. AgodaVIP).
 
 ---
 
