@@ -24,8 +24,10 @@ from booking import (
     add_lodging_to_wanderlog,
     apply_genius_discounts,
     build_booking_hotel_url,
+    print_booking_cookie_feedback,
     run_status_check,
     search_hotels,
+    verify_booking_session,
 )
 
 
@@ -339,6 +341,79 @@ def test_build_booking_hotel_url():
     assert "https://www.booking.com/searchresults.html" in url_fallback
     assert "ss=Tam+Coc+Victoria+Hotel" in url_fallback
     assert "checkin=2027-01-27" in url
+
+
+def test_verify_booking_session_valid():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.url = "https://secure.booking.com/myreservations.html"
+    mock_resp.is_redirect = False
+    mock_resp.history = []
+    mock_resp.text = "<html><body><h1>My Bookings</h1></body></html>"
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        is_valid, reason, msg = verify_booking_session("bkng_sso_session=valid_token")
+        assert is_valid is True
+        assert reason == "valid"
+        assert "active and authenticated" in msg
+
+
+def test_verify_booking_session_expired():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.url = "https://account.booking.com/sign-in?op_token=123"
+    mock_resp.is_redirect = False
+    mock_resp.history = []
+    mock_resp.text = "<html><body><form id='signin_form'>Sign in</form></body></html>"
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        is_valid, reason, msg = verify_booking_session("bkng_sso_session=expired_token")
+        assert is_valid is False
+        assert reason == "expired"
+
+
+def test_verify_booking_session_challenge():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 202
+    mock_resp.url = "https://secure.booking.com/myreservations.html"
+    mock_resp.is_redirect = False
+    mock_resp.history = []
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        is_valid, reason, msg = verify_booking_session("bkng_sso_session=challenge_cookie")
+        assert is_valid is False
+        assert reason == "challenge"
+
+
+def test_verify_booking_session_unavailable():
+    is_valid, reason, msg = verify_booking_session("")
+    assert is_valid is False
+    assert reason == "unavailable"
+
+    is_valid2, reason2, _ = verify_booking_session(None)
+    assert is_valid2 is False
+    assert reason2 == "unavailable"
+
+
+def test_print_booking_cookie_feedback():
+    # Ensure feedback renders cleanly for all status types without error
+    for status_type in ["expired", "challenge", "unavailable", "network_error"]:
+        print_booking_cookie_feedback(status_type, details="Test details")
 
 
 if __name__ == "__main__":

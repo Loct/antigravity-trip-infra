@@ -24,11 +24,13 @@ from agoda import (
     apply_vip_discount,
     build_agoda_hotel_url,
     detect_personal_account_tier,
+    print_agoda_cookie_feedback,
     print_personal_account_setup_prompt,
     run_status_check,
     search_apify,
     search_hotels,
     search_rapidapi,
+    verify_agoda_session,
 )
 
 
@@ -383,6 +385,72 @@ def test_agoda_config_personal_account_prompt_needed():
 def test_print_personal_account_setup_prompt():
     # Ensure it prints cleanly without errors
     print_personal_account_setup_prompt()
+
+
+def test_verify_agoda_session_valid():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "vipStatus": "Gold",
+        "email": "gold@test.com",
+    }
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        is_valid, reason, msg, data = verify_agoda_session("agoda.web.auth=token123")
+        assert is_valid is True
+        assert reason == "valid"
+        assert data.get("vipStatus") == "Gold"
+
+
+def test_verify_agoda_session_expired():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 401
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        is_valid, reason, msg, data = verify_agoda_session("agoda.web.auth=stale_token")
+        assert is_valid is False
+        assert reason == "expired"
+
+
+def test_verify_agoda_session_challenge():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 403
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        is_valid, reason, msg, data = verify_agoda_session("agoda.web.auth=bot_token")
+        assert is_valid is False
+        assert reason == "challenge"
+
+
+def test_verify_agoda_session_unavailable():
+    is_valid, reason, msg, _ = verify_agoda_session("")
+    assert is_valid is False
+    assert reason == "unavailable"
+
+    is_valid2, reason2, _, _ = verify_agoda_session(None)
+    assert is_valid2 is False
+    assert reason2 == "unavailable"
+
+
+def test_print_agoda_cookie_feedback():
+    # Ensure feedback renders cleanly for all status types without error
+    for status_type in ["expired", "challenge", "unavailable", "network_error"]:
+        print_agoda_cookie_feedback(status_type, details="Test details")
 
 
 if __name__ == "__main__":

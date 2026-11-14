@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from web_app import (
     clean_ansi,
+    format_cookie_error_banner,
     handle_agoda_search,
     handle_booking_search,
     handle_compare_hotels,
@@ -393,6 +394,46 @@ def test_handle_compare_hotels_command_construction():
     assert "Booking.com" in res
     assert "Agoda" in res
     assert "EUR 165.00" in res
+
+
+def test_format_cookie_error_banner_booking_expired():
+    banner = format_cookie_error_banner(
+        "Booking.com",
+        "PermissionError: Booking.com returned status 401 (session challenge or verification required)",
+    )
+    assert banner is not None
+    assert "Booking.com Session Cookie Expired" in banner
+    assert "./scripts/login_booking.sh" in banner
+
+
+def test_format_cookie_error_banner_booking_missing():
+    banner = format_cookie_error_banner(
+        "Booking.com",
+        "ValueError: Booking.com session cookie is not configured",
+    )
+    assert banner is not None
+    assert "Booking.com Cookie Missing" in banner
+    assert "./scripts/login_booking.sh" in banner
+
+
+def test_format_cookie_error_banner_agoda_expired():
+    banner = format_cookie_error_banner(
+        "Agoda",
+        "RuntimeError: Direct Web: Agoda session cookie expired (redirected to signin.html)",
+    )
+    assert banner is not None
+    assert "Agoda Session Cookie Expired" in banner
+    assert "./scripts/login_agoda.sh" in banner
+
+
+def test_format_cookie_error_banner_agoda_challenge():
+    banner = format_cookie_error_banner(
+        "Agoda",
+        "RuntimeError: Direct Web: Agoda bot protection or challenge required (HTTP 403)",
+    )
+    assert banner is not None
+    assert "Agoda Security Challenge Triggered" in banner
+    assert "./scripts/login_agoda.sh" in banner
 
 
 if __name__ == "__main__":

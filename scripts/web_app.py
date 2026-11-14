@@ -309,7 +309,9 @@ async def handle_status() -> str:
     if bkng_cookie:
         lines.append("- ✅ **Booking.com**: Authenticated with Genius Level discounts")
     else:
-        lines.append("- ℹ️ **Booking.com**: No session cookie set (standard public pricing)")
+        lines.append(
+            "- ℹ️ **Booking.com**: No session cookie set (standard public pricing; run `./scripts/login_booking.sh` for Genius discounts)"
+        )
 
     # 4. Agoda
     agoda_key = os.getenv("AGODA_API_KEY", "") or os.getenv("RAPIDAPI_KEY", "")
@@ -392,6 +394,43 @@ async def handle_trips_list() -> str:
             return "⚠️ `wanderlog` binary is not installed in the container PATH."
 
 
+def format_cookie_error_banner(provider: str, error_text: str) -> Optional[str]:
+    """Inspect error output and return a high-clarity markdown recovery banner if cookie is expired/missing."""
+    err_lower = error_text.lower()
+    if provider == "Booking.com":
+        if "session cookie is not configured" in err_lower or "unavailable" in err_lower:
+            return (
+                "> ⚠️ **Booking.com Cookie Missing**\n"
+                "> `BOOKING_SESSION_COOKIE` is not configured. Run `./scripts/login_booking.sh` to link your browser cookie "
+                "and unlock Genius Level 3 (-20%) discounts."
+            )
+        if any(term in err_lower for term in ["expired", "401", "challenge", "202", "403", "signin", "sign-in"]):
+            return (
+                "> ⚠️ **Booking.com Session Cookie Expired or Blocked**\n"
+                "> Your Booking.com browser session cookie has expired or failed verification.\n"
+                ">\n"
+                "> **Quick Fix (30s)**:\n"
+                "> 1. Run `./scripts/login_booking.sh`\n"
+                "> 2. Or copy `bkng_sso_session` from DevTools (F12 -> Application -> Cookies -> booking.com) and update `.env`."
+            )
+    elif provider == "Agoda":
+        if any(term in err_lower for term in ["expired", "401", "unauthenticated", "signin", "login"]):
+            return (
+                "> ⚠️ **Agoda Session Cookie Expired**\n"
+                "> Your Agoda personal session cookie has expired or was invalidated.\n"
+                ">\n"
+                "> **Quick Fix (30s)**:\n"
+                "> 1. Run `./scripts/login_agoda.sh` (Option 3: Personal Account & Session Cookie)\n"
+                "> 2. Or copy `agoda.web.auth` from DevTools and update `AGODA_SESSION_COOKIE` in `.env`."
+            )
+        if "challenge" in err_lower or "403" in err_lower:
+            return (
+                "> ⚠️ **Agoda Security Challenge Triggered**\n"
+                "> Agoda bot protection blocked direct requests. Update `AGODA_SESSION_COOKIE` via `./scripts/login_agoda.sh` (Option 3)."
+            )
+    return None
+
+
 async def handle_booking_search(args: str) -> str:
     """Execute Booking.com search via scripts/booking.py."""
     parts = args.strip().split()
@@ -425,7 +464,9 @@ async def handle_booking_search(args: str) -> str:
             else:
                 err = clean_ansi(stderr.decode().strip() if stderr else "Search failed")
                 step.output = f"Failed with code {proc.returncode}"
-                return f"⚠️ **Hotel search error**:\n```text\n{err or output}\n```"
+                banner = format_cookie_error_banner("Booking.com", err or output)
+                banner_md = f"{banner}\n\n" if banner else ""
+                return f"{banner_md}⚠️ **Hotel search error**:\n```text\n{err or output}\n```"
         except Exception as e:
             step.output = str(e)
             return f"⚠️ Error executing hotel search: {e}"
@@ -464,7 +505,9 @@ async def handle_agoda_search(args: str) -> str:
             else:
                 err = clean_ansi(stderr.decode().strip() if stderr else "Search failed")
                 step.output = f"Failed with code {proc.returncode}"
-                return f"⚠️ **Agoda search error**:\n```text\n{err or output}\n```"
+                banner = format_cookie_error_banner("Agoda", err or output)
+                banner_md = f"{banner}\n\n" if banner else ""
+                return f"{banner_md}⚠️ **Agoda search error**:\n```text\n{err or output}\n```"
         except Exception as e:
             step.output = str(e)
             return f"⚠️ Error executing Agoda search: {e}"
@@ -535,20 +578,36 @@ async def handle_compare_hotels(args: str) -> str:
             except Exception:
                 pass
 
+        # Check for cookie warnings/errors on either provider
+        banner_b = format_cookie_error_banner("Booking.com", err_b or out_b)
+        banner_a = format_cookie_error_banner("Agoda", err_a or out_a)
+
         if not hotels_b and not hotels_a:
+            combined_banners = "\n\n".join(b for b in [banner_b, banner_a] if b)
+            banner_prefix = f"{combined_banners}\n\n" if combined_banners else ""
             return (
-                f"⚠️ **Could not retrieve hotels for {city}**:\n\n"
+                f"{banner_prefix}⚠️ **Could not retrieve hotels for {city}**:\n\n"
                 f"**Booking.com**:\n```text\n{err_b or out_b or 'No results'}\n```\n\n"
                 f"**Agoda**:\n```text\n{err_a or out_a or 'No results'}\n```"
             )
 
         # Build comparative Markdown table
-        lines = [
-            f"### 🏨 Hotel Comparison: Booking.com vs. Agoda for '{city}'",
-            "",
-            "| # | Property Name | Provider | Rate / Deal | Rating | Perks / Badges | Direct Link |",
-            "|---|---|---|---|:---:|---|---|",
-        ]
+        lines = []
+        if not hotels_b:
+            lines.append(banner_b or f"> ⚠️ **Booking.com**: No properties retrieved (`{err_b or 'No availability'}`)")
+            lines.append("")
+        if not hotels_a:
+            lines.append(banner_a or f"> ⚠️ **Agoda**: No properties retrieved (`{err_a or 'No availability'}`)")
+            lines.append("")
+
+        lines.extend(
+            [
+                f"### 🏨 Hotel Comparison: Booking.com vs. Agoda for '{city}'",
+                "",
+                "| # | Property Name | Provider | Rate / Deal | Rating | Perks / Badges | Direct Link |",
+                "|---|---|---|---|:---:|---|---|",
+            ]
+        )
 
         row_idx = 1
         for h in hotels_b[:5]:
