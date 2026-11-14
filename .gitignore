@@ -1,6 +1,11 @@
+# Environment files and credentials
 .env
-*.local
+.env.*
+!.env.example
 credentials.json
+*.pem
+*.key
+*.local
 .DS_Store
 *.tar.gz
 *.code-workspace
