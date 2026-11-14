@@ -112,9 +112,13 @@ In the Chainlit web interface, search Agoda directly using:
 
 ---
 
-## 5. Multi-OTA Comparison (Agoda vs. Booking.com vs. Wanderlog)
+## 5. Mandatory Dual-OTA Comparison (Agoda & Booking.com)
 
-When the user asks for comparison across booking platforms:
+> [!IMPORTANT]
+> **Always Search Both Platforms**:
+> Whenever the user asks for hotels or accommodation options in any destination, Antigravity **MUST ALWAYS** query both Agoda and Booking.com in parallel (`-f json`), then present a unified comparative overview table comparing rates (AgodaVIP vs. Genius Lv3), ratings, perks, and verified links.
+
+When comparing across booking platforms:
 1. Search Agoda:
    ```bash
    uv run scripts/agoda.py search -l "Osaka" -i 2026-11-10 -o 2026-11-14 -f json
@@ -125,11 +129,11 @@ When the user asks for comparison across booking platforms:
    ```
 3. Check native Wanderlog Google lodging rates:
    - Call Wanderlog MCP tool `search_hotels` or `get_hotel_rates`.
-4. Synthesize results side-by-side in a comparative table with links, ratings, and rates per night.
+4. Synthesize results side-by-side in a comparative overview table with links, ratings, and rates per night.
 
 ---
 
-## 5. Adding Accommodations to Wanderlog Trips
+## 6. Adding Accommodations to Wanderlog Trips
 
 > [!IMPORTANT]
 > **Trip Mutation Policy**:

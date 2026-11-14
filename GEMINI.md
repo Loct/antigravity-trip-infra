@@ -10,7 +10,13 @@
 
 ## Hotel & Lodging Search & Booking Policies
 - **Always Use Workspace CLIs**: When searching, comparing, pricing, or looking up accommodations/hotels/lodging, Antigravity MUST ALWAYS execute the workspace lodging scripts (`uv run scripts/booking.py` and `uv run scripts/agoda.py`) rather than relying on generic public web searches or external guesses. The user has active account credentials, session cookies, and Genius Level loyalty discounts configured in the workspace CLI.
-- **Valid Direct URLs Required**: When returning or displaying Booking.com properties, NEVER generate broken placeholder URLs (e.g. `booking.com/hotel/<id>.html`). Always ensure valid URLs are constructed using the canonical country code and property slug (`https://www.booking.com/hotel/{country_code}/{slug}.html`) with travel dates and guest counts pre-populated, or the search/deeplink format (`https://www.booking.com/searchresults.html?ss={hotel_name}&checkin={checkin}&checkout={checkout}&group_adults={guests}&no_rooms={rooms}`).
+- **Mandatory Dual-OTA Search & Comparative Overview**: Whenever the user asks for hotels, accommodations, or lodging in any destination:
+  1. Antigravity MUST ALWAYS search **BOTH** Booking.com (`uv run scripts/booking.py search -l <city> ...`) and Agoda (`uv run scripts/agoda.py search -l <city> ...`).
+  2. Synthesize results side-by-side in a comparative overview table that compares: Property Name, Provider (Booking.com vs. Agoda), Nightly / Total Rate (with Genius Lv3 or AgodaVIP discounts clearly highlighted), Review Score, Key Amenities (Free Cancellation, Breakfast), and Direct Booking Link.
+  3. Highlight which platform offers the better deal or perks for comparable stays.
+- **Valid Direct URLs Required**: When returning or displaying properties:
+  - For Booking.com: NEVER generate broken placeholder URLs (e.g. `booking.com/hotel/<id>.html`). Always ensure valid URLs are constructed using the canonical country code and property slug (`https://www.booking.com/hotel/{country_code}/{slug}.html`) with travel dates and guest counts pre-populated, or the search/deeplink format (`https://www.booking.com/searchresults.html?ss={hotel_name}&checkin={checkin}&checkout={checkout}&group_adults={guests}&no_rooms={rooms}`).
+  - For Agoda: NEVER generate broken placeholder URLs (e.g. `agoda.com/hotel/<id>.html`). Always construct valid canonical URLs or pre-populated deep search links (`https://www.agoda.com/search?text={hotel_name}&checkIn={checkin}&checkOut={checkout}&adults={guests}&rooms={rooms}`).
 
 ## Self-Update Disambiguation & Procedure
 - **Workspace Script Priority**: When the user requests "self update", "run self update", or "update yourself", ALWAYS execute the workspace updater script (`/workspace/scripts/self_update.sh`). NEVER run `agy update` directly in isolation.

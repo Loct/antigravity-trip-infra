@@ -23,6 +23,7 @@ from web_app import (
     clean_ansi,
     handle_agoda_search,
     handle_booking_search,
+    handle_compare_hotels,
     handle_status,
     init_sqlite_db,
     parse_thread_metadata,
@@ -316,6 +317,84 @@ def test_handle_booking_search_command_construction():
     assert cmd[cmd.index("-o") + 1] == "2026-12-05"
 
 
+def test_handle_compare_hotels_command_construction():
+    """Verify handle_compare_hotels executes both Booking.com and Agoda and builds a comparative table."""
+    import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    import web_app
+
+    captured_cmds = []
+
+    mock_booking_json = json.dumps(
+        {
+            "hotels": [
+                {
+                    "name": "Booking Grand Hotel",
+                    "total_price": 250.0,
+                    "currency": "EUR",
+                    "rating": 9.2,
+                    "badges": ["Free cancellation"],
+                    "url": "https://www.booking.com/hotel/jp/grand.html",
+                }
+            ]
+        }
+    ).encode()
+
+    mock_agoda_json = json.dumps(
+        {
+            "hotels": [
+                {
+                    "name": "Agoda River Resort",
+                    "total_price": 220.0,
+                    "vip_price_text": "EUR 165.00",
+                    "is_vip_deal": True,
+                    "vip_discount_rate": 0.25,
+                    "currency": "EUR",
+                    "rating": 9.0,
+                    "badges": ["Breakfast included"],
+                    "url": "https://www.agoda.com/search?hotel=123",
+                }
+            ]
+        }
+    ).encode()
+
+    async def fake_subprocess_exec(*cmd, **kwargs):
+        captured_cmds.append(list(cmd))
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 0
+        if "booking.py" in cmd[2]:
+            mock_proc.communicate = AsyncMock(return_value=(mock_booking_json, b""))
+        else:
+            mock_proc.communicate = AsyncMock(return_value=(mock_agoda_json, b""))
+        return mock_proc
+
+    mock_step = MagicMock()
+    mock_step.__aenter__ = AsyncMock(return_value=mock_step)
+    mock_step.__aexit__ = AsyncMock(return_value=None)
+
+    mock_cl = MagicMock()
+    mock_cl.Step = MagicMock(return_value=mock_step)
+
+    with patch.object(web_app, "cl", mock_cl):
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+            res = asyncio.run(handle_compare_hotels("Tokyo 2026-12-01 2026-12-05"))
+
+    assert len(captured_cmds) == 2
+    # Verify both commands were executed
+    executed_scripts = [cmd[2] for cmd in captured_cmds]
+    assert any("booking.py" in s for s in executed_scripts)
+    assert any("agoda.py" in s for s in executed_scripts)
+
+    # Verify comparative table output
+    assert "Hotel Comparison: Booking.com vs. Agoda" in res
+    assert "Booking Grand Hotel" in res
+    assert "Agoda River Resort" in res
+    assert "Booking.com" in res
+    assert "Agoda" in res
+    assert "EUR 165.00" in res
+
+
 if __name__ == "__main__":
     test_clean_ansi()
     test_clean_ansi_plain_text()
@@ -324,4 +403,5 @@ if __name__ == "__main__":
     test_run_agy_agent_command_construction()
     test_handle_agoda_search_command_construction()
     test_handle_booking_search_command_construction()
+    test_handle_compare_hotels_command_construction()
     print("All web_app tests passed successfully!")

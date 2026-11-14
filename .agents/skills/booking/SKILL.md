@@ -80,7 +80,25 @@ Search outputs include canonical direct URLs for each property:
 
 ---
 
-## 4. Adding Accommodations to Wanderlog Trips
+## 4. Mandatory Dual-OTA Comparison (Booking.com & Agoda)
+
+> [!IMPORTANT]
+> **Always Search Both Platforms**:
+> When the user asks for hotels or accommodation options in any destination, Antigravity **MUST ALWAYS** query both Booking.com and Agoda in parallel (`-f json`), then present a unified comparative overview table comparing rates (Genius vs. AgodaVIP), ratings, badges, and verified links.
+
+1. Query Booking.com:
+   ```bash
+   uv run scripts/booking.py search -l "<city>" -i <in> -o <out> -f json
+   ```
+2. Query Agoda:
+   ```bash
+   uv run scripts/agoda.py search -l "<city>" -i <in> -o <out> -f json
+   ```
+3. Synthesize side-by-side in a comparative overview table.
+
+---
+
+## 5. Adding Accommodations to Wanderlog Trips
 
 > [!IMPORTANT]
 > **Trip Mutation Policy**:
