@@ -105,6 +105,151 @@ def build_booking_hotel_url(
     return base
 
 
+def print_booking_cookie_feedback(status_type: str, details: Optional[str] = None) -> None:
+    """
+    Render a high-clarity Rich feedback panel when Booking.com session cookie
+    is expired, challenged, or unavailable.
+    """
+    if status_type == "expired":
+        title = "⚠️ Booking.com Session Cookie Expired — Please Log In Again"
+        border_style = "bold red"
+        symptom = (
+            "🔴 [bold red]SESSION EXPIRED: YOU MUST LOG IN AGAIN TO BOOKING.COM[/bold red]\n"
+            "Your Booking.com session cookie ('bkng_sso_session') has expired or was invalidated by Booking.com.\n"
+            "You need to log into your account again in your browser to generate a fresh authenticated session."
+        )
+        action_header = "[bold cyan]⚡ Action Required: Re-authenticate / Log In Again[/bold cyan]"
+        step1_title = "Log into your account again in your browser"
+        impact = (
+            "Genius Level discounts (-10% to -20%) and authenticated rates cannot be verified. "
+            "Searches may fail or fall back to unauthenticated public pricing."
+        )
+    elif status_type == "challenge":
+        title = "🛡️ Booking.com Security Challenge Triggered — Please Log In Again"
+        border_style = "bold yellow"
+        symptom = (
+            "🛡️ [bold yellow]SECURITY CHALLENGE / CAPTCHA: PLEASE LOG IN AGAIN IN BROWSER[/bold yellow]\n"
+            "Booking.com bot protection triggered (HTTP 202/403 challenge or verification checkpoint)."
+        )
+        action_header = "[bold cyan]⚡ Action Required: Pass Challenge & Re-authenticate[/bold cyan]"
+        step1_title = "Log in again in your browser to complete verification"
+        impact = "Search queries are blocked until a fresh browser session cookie is supplied."
+    elif status_type == "unavailable":
+        title = "❌ Booking.com Session Cookie Unset — Please Log In & Configure"
+        border_style = "bold yellow"
+        symptom = (
+            "🟡 [bold yellow]SESSION COOKIE UNSET: PLEASE LOG IN TO BOOKING.COM[/bold yellow]\n"
+            "No Booking.com session cookie ('BOOKING_SESSION_COOKIE') is set in your environment or credentials.\n"
+            "You must log into Booking.com in your browser to retrieve your session cookie and unlock Genius loyalty rates."
+        )
+        action_header = "[bold cyan]⚡ Action Required: Log In to Booking.com & Configure Session[/bold cyan]"
+        step1_title = "Log into Booking.com in your browser"
+        impact = "Authenticated searches and Genius Level loyalty discounts (-10% to -20%) cannot be applied."
+    else:
+        title = "⚠️ Booking.com Session Verification Alert"
+        border_style = "yellow"
+        symptom = f"Booking.com session status: {status_type}."
+        action_header = "[bold cyan]⚡ Action Required:[/bold cyan]"
+        step1_title = "Sign into your account in your browser"
+        impact = "May impact member pricing and result availability."
+
+    details_line = f"\n[dim]Details: {details}[/dim]\n" if details else ""
+
+    panel_content = (
+        f"[bold]{symptom}[/bold]\n"
+        f"{details_line}\n"
+        f"[bold]Impact:[/bold] {impact}\n\n"
+        f"{action_header}\n"
+        f"  1. [bold yellow]{step1_title}:[/bold yellow]\n"
+        "     • Open [link=https://www.booking.com]https://www.booking.com[/link] in Chrome or Firefox and [bold underline]sign into your account[/bold underline].\n\n"
+        "  2. [bold yellow]Save your session cookie (choose one):[/bold yellow]\n"
+        "     • Run setup helper: [bold green]./scripts/login_booking.sh[/bold green]\n"
+        "     • Or press [bold]F12[/bold] (DevTools) → [bold]Application[/bold] → [bold]Cookies[/bold] → [bold]https://www.booking.com[/bold],\n"
+        "       copy [bold]bkng_sso_session[/bold], and set in [bold].env[/bold]:\n"
+        '       [bold cyan]BOOKING_SESSION_COOKIE="bkng_sso_session=..."[/bold cyan]\n\n'
+        "  3. [bold yellow]Verify your session:[/bold yellow]\n"
+        "     [bold green]uv run scripts/booking.py status[/bold green]"
+    )
+
+    err_console.print(
+        Panel(
+            panel_content,
+            title=f"[bold]{title}[/bold]",
+            border_style=border_style,
+            expand=False,
+        )
+    )
+
+
+def verify_booking_session(
+    session_cookie: Optional[str],
+    timeout: float = 5.0,
+    client: Optional[httpx.Client] = None,
+) -> Tuple[bool, str, str]:
+    """
+    Live verification of Booking.com session cookie validity.
+    Returns: (is_valid: bool, status_type: str, details: str)
+    status_type in {"valid", "expired", "challenge", "unavailable", "network_error"}
+    """
+    if not session_cookie or not session_cookie.strip():
+        return False, "unavailable", "Booking.com session cookie is not configured"
+
+    cookie_val = session_cookie.strip()
+    if "bkng_sso" not in cookie_val and "=" not in cookie_val:
+        cookie_header = f"bkng_sso_session={cookie_val}"
+    else:
+        cookie_header = cookie_val
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.booking.com/",
+        "Cookie": cookie_header,
+    }
+
+    url = "https://secure.booking.com/myreservations.html"
+
+    def _eval_response(r: httpx.Response) -> Tuple[bool, str, str]:
+        if r.status_code in (202, 403):
+            return False, "challenge", f"Security verification or bot challenge required (HTTP {r.status_code})"
+        if r.status_code == 401:
+            return False, "expired", "Session rejected with HTTP 401 Unauthorized"
+        final_url = str(r.url).lower()
+        if "sign-in" in final_url or "signin" in final_url or "login" in final_url:
+            return (
+                False,
+                "expired",
+                "Session cookie expired (redirected to sign-in; please log in again at https://www.booking.com)",
+            )
+        if r.status_code == 200:
+            text_lower = r.text[:3000].lower()
+            if "sign in to your account" in text_lower or 'data-testid="signin-form"' in text_lower:
+                return (
+                    False,
+                    "expired",
+                    "Login prompt detected on authenticated endpoint (please log in again at https://www.booking.com)",
+                )
+            return True, "valid", "Booking.com session cookie is active and authenticated"
+        return False, "network_error", f"Unexpected HTTP status {r.status_code}"
+
+    try:
+        if client is not None:
+            r = client.get(url, headers=headers, follow_redirects=True)
+            return _eval_response(r)
+        with httpx.Client(timeout=timeout, follow_redirects=True) as local_client:
+            r = local_client.get(url, headers=headers)
+            return _eval_response(r)
+    except httpx.RequestError as e:
+        return False, "network_error", f"Network connection error during verification: {e}"
+    except Exception as e:
+        return False, "network_error", f"Verification failed: {e}"
+
+
 class BookingConfig:
     def __init__(
         self,
@@ -164,9 +309,10 @@ def search_scrape(
 ) -> List[Hotel]:
     """Search hotels via authenticated Booking.com session cookie."""
     if not config.session_cookie:
+        print_booking_cookie_feedback("unavailable")
         raise ValueError(
-            "Booking.com session cookie is not configured.\n"
-            "Please set BOOKING_SESSION_COOKIE in .env or run './scripts/login_booking.sh'."
+            "Booking.com session cookie is not configured (unset).\n"
+            "Please log into Booking.com in your browser and run './scripts/login_booking.sh' (or set BOOKING_SESSION_COOKIE in .env)."
         )
 
     from bs4 import BeautifulSoup
@@ -208,11 +354,19 @@ def search_scrape(
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
         r = client.get(url, params=params, headers=headers)
         if r.status_code in [202, 403]:
+            print_booking_cookie_feedback("challenge", f"Booking.com returned status {r.status_code}")
             raise PermissionError(
                 f"Booking.com returned status {r.status_code} (session challenge or verification required).\n"
                 "Please update your BOOKING_SESSION_COOKIE by copying the latest 'bkng_sso_session' cookie "
                 "from your logged-in browser (F12 -> Application -> Cookies -> https://www.booking.com) "
                 "and running './scripts/login_booking.sh'."
+            )
+        if r.status_code == 401 or ("signin" in str(r.url).lower() and "/searchresults.html" not in str(r.url).lower()):
+            clean_url = str(r.url).split("?")[0]
+            print_booking_cookie_feedback("expired", f"Redirected to signin endpoint: {clean_url}")
+            raise PermissionError(
+                "Booking.com session cookie has expired (session challenge or verification required).\n"
+                "You must log into Booking.com again in your browser and run './scripts/login_booking.sh' to update your cookie."
             )
         r.raise_for_status()
 
@@ -506,35 +660,66 @@ def add_lodging_to_wanderlog(
         return False
 
 
-def run_status_check(config: BookingConfig) -> None:
+def run_status_check(config: BookingConfig, live_verify: bool = True) -> None:
     """Print configuration and connectivity status for Booking.com cookie session."""
     table = Table(
-        title="🔍 Booking.com Integration Status",
+        title="🔍 Booking.com Integration & Session Status",
         header_style="bold cyan",
         show_lines=True,
     )
     table.add_column("Setting / Component", style="bold white", width=25)
-    table.add_column("Status", width=15)
+    table.add_column("Status", width=22)
     table.add_column("Details", style="dim")
+
+    cookie_feedback_type: Optional[str] = None
+    cookie_feedback_details: Optional[str] = None
 
     # 1. Session Cookie
     if config.session_cookie:
-        masked = (
-            config.session_cookie[:15] + "..." + config.session_cookie[-6:]
-            if len(config.session_cookie) > 25
-            else "***"
-        )
-        table.add_row(
-            "Session Cookie",
-            "[green]Configured[/green]",
-            f"Active ({len(config.session_cookie)} chars): {masked}",
-        )
+        cookie_label = f"BOOKING_SESSION_COOKIE ({len(config.session_cookie)} chars)"
+        if live_verify:
+            is_valid, reason, msg = verify_booking_session(config.session_cookie)
+            if is_valid:
+                table.add_row(
+                    "Session Cookie",
+                    "[bold green]Active & Valid[/bold green]",
+                    f"Verified: {cookie_label}",
+                )
+            elif reason == "expired":
+                table.add_row(
+                    "Session Cookie",
+                    "[bold red]Expired (Re-login Required)[/bold red]",
+                    f"Session expired: {msg}",
+                )
+                cookie_feedback_type = "expired"
+                cookie_feedback_details = msg
+            elif reason == "challenge":
+                table.add_row(
+                    "Session Cookie",
+                    "[bold yellow]Challenge Required[/bold yellow]",
+                    f"Bot check: {msg}",
+                )
+                cookie_feedback_type = "challenge"
+                cookie_feedback_details = msg
+            else:
+                table.add_row(
+                    "Session Cookie",
+                    "[green]Configured[/green]",
+                    f"Active ({cookie_label}, check skipped)",
+                )
+        else:
+            table.add_row(
+                "Session Cookie",
+                "[green]Configured[/green]",
+                f"Active: {cookie_label}",
+            )
     else:
         table.add_row(
             "Session Cookie",
-            "[yellow]Not Configured[/yellow]",
-            "Set BOOKING_SESSION_COOKIE in .env or run ./scripts/login_booking.sh",
+            "[bold yellow]Unset / Not Configured[/bold yellow]",
+            "Session cookie is unset: please log into Booking.com and run ./scripts/login_booking.sh",
         )
+        cookie_feedback_type = "unavailable"
 
     # 2. Genius Loyalty
     genius_lvl = int(os.getenv("GENIUS_LEVEL", os.getenv("BOOKING_GENIUS_LEVEL", str(DEFAULT_GENIUS_LEVEL))))
@@ -568,6 +753,9 @@ def run_status_check(config: BookingConfig) -> None:
         )
 
     console.print(table)
+
+    if cookie_feedback_type:
+        print_booking_cookie_feedback(cookie_feedback_type, cookie_feedback_details)
 
 
 def main() -> None:
@@ -632,7 +820,9 @@ def main() -> None:
     search_p.add_argument("--session-cookie", help="Override Booking session cookie")
 
     # Subcommand: status
-    subparsers.add_parser("status", help="Check configured credentials and connectivity status")
+    status_p = subparsers.add_parser("status", help="Check configured credentials and connectivity status")
+    status_p.add_argument("--no-verify", action="store_true", help="Skip live endpoint validation")
+    status_p.add_argument("--session-cookie", help="Override Booking session cookie")
 
     args = parser.parse_args()
 
@@ -645,7 +835,7 @@ def main() -> None:
     )
 
     if args.subcommand == "status":
-        run_status_check(config)
+        run_status_check(config, live_verify=not getattr(args, "no_verify", False))
         sys.exit(0)
 
     if args.subcommand == "search":

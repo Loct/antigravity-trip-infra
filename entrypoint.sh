@@ -295,10 +295,11 @@ if [ "$ENABLE_WEB_UI" = "true" ]; then
   AUTH_SECRET_FILE="/root/.gemini/antigravity-cli/.chainlit_secret"
   if [ -z "${CHAINLIT_AUTH_SECRET:-}" ]; then
     if [ ! -f "$AUTH_SECRET_FILE" ]; then
-      openssl rand -hex 32 > "$AUTH_SECRET_FILE"
+      openssl rand -hex 32 >"$AUTH_SECRET_FILE"
       chmod 600 "$AUTH_SECRET_FILE"
     fi
-    export CHAINLIT_AUTH_SECRET="$(cat "$AUTH_SECRET_FILE")"
+    CHAINLIT_AUTH_SECRET="$(cat "$AUTH_SECRET_FILE")"
+    export CHAINLIT_AUTH_SECRET
   fi
 
   # Ensure .chainlit/config.toml has required [meta] section
@@ -307,7 +308,7 @@ if [ "$ENABLE_WEB_UI" = "true" ]; then
   fi
 
   cd /workspace
-  uv run chainlit run scripts/web_app.py --host 0.0.0.0 --port "${WEB_PORT}" --headless > /root/.gemini/antigravity-cli/web-ui.log 2>&1 &
+  uv run chainlit run scripts/web_app.py --host 0.0.0.0 --port "${WEB_PORT}" --headless >/root/.gemini/antigravity-cli/web-ui.log 2>&1 &
   WEB_PID=$!
   sleep 3
 
