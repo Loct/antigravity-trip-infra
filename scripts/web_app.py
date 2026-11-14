@@ -32,7 +32,7 @@ import shutil
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import chainlit as cl
@@ -470,6 +470,129 @@ async def handle_agoda_search(args: str) -> str:
             return f"⚠️ Error executing Agoda search: {e}"
 
 
+async def handle_compare_hotels(args: str) -> str:
+    """Execute parallel Booking.com and Agoda search and synthesize a comparative overview."""
+    parts = args.strip().split()
+    if not parts:
+        return "⚠️ **Usage**: `/hotels <city> [checkin] [checkout]` (e.g. `/hotels Tokyo 2026-04-01 2026-04-05`)"
+
+    city = parts[0]
+    checkin = parts[1] if len(parts) > 1 else None
+    checkout = parts[2] if len(parts) > 2 else None
+
+    # Base commands requesting JSON output for structured comparison
+    bkng_cmd = ["uv", "run", str(SCRIPT_DIR / "booking.py"), "search", "-l", city, "-f", "json", "--limit", "5"]
+    agoda_cmd = ["uv", "run", str(SCRIPT_DIR / "agoda.py"), "search", "-l", city, "-f", "json", "--limit", "5"]
+
+    if checkin:
+        bkng_cmd.extend(["-i", checkin])
+        agoda_cmd.extend(["-i", checkin])
+    if checkout:
+        bkng_cmd.extend(["-o", checkout])
+        agoda_cmd.extend(["-o", checkout])
+
+    async with cl.Step(name=f"Comparing Booking.com & Agoda for {city}", type="tool") as step:
+        step.output = "Searching Booking.com & Agoda simultaneously..."
+
+        async def run_cmd(cmd: List[str]) -> Tuple[int, str, str]:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(WORKSPACE_DIR),
+                )
+                stdout, stderr = await proc.communicate()
+                return (
+                    proc.returncode,
+                    clean_ansi(stdout.decode().strip() if stdout else ""),
+                    clean_ansi(stderr.decode().strip() if stderr else ""),
+                )
+            except Exception as e:
+                return -1, "", str(e)
+
+        (code_b, out_b, err_b), (code_a, out_a, err_a) = await asyncio.gather(
+            run_cmd(bkng_cmd),
+            run_cmd(agoda_cmd),
+        )
+
+        step.output = "Search complete, synthesizing comparison table..."
+
+        # Parse JSON
+        hotels_b = []
+        if code_b == 0 and out_b:
+            try:
+                data_b = json.loads(out_b)
+                hotels_b = data_b.get("hotels", [])
+            except Exception:
+                pass
+
+        hotels_a = []
+        if code_a == 0 and out_a:
+            try:
+                data_a = json.loads(out_a)
+                hotels_a = data_a.get("hotels", [])
+            except Exception:
+                pass
+
+        if not hotels_b and not hotels_a:
+            return (
+                f"⚠️ **Could not retrieve hotels for {city}**:\n\n"
+                f"**Booking.com**:\n```text\n{err_b or out_b or 'No results'}\n```\n\n"
+                f"**Agoda**:\n```text\n{err_a or out_a or 'No results'}\n```"
+            )
+
+        # Build comparative Markdown table
+        lines = [
+            f"### 🏨 Hotel Comparison: Booking.com vs. Agoda for '{city}'",
+            "",
+            "| # | Property Name | Provider | Rate / Deal | Rating | Perks / Badges | Direct Link |",
+            "|---|---|---|---|:---:|---|---|",
+        ]
+
+        row_idx = 1
+        for h in hotels_b[:5]:
+            name = h.get("name", "Unknown")
+            rate = (
+                h.get("genius_price_text")
+                or h.get("price_text")
+                or (f"{h.get('currency')} {h.get('total_price'):.2f}" if h.get("total_price") else "Check rate")
+            )
+            if h.get("is_genius_deal"):
+                rate += f" *(Genius -{int(h.get('genius_discount_rate', 0.2) * 100)}%)*"
+            score = f"{h.get('rating'):.1f}/10" if h.get("rating") else "N/A"
+            badges = ", ".join(h.get("badges", [])) or "—"
+            url = h.get("url", "#")
+            link_md = f"[Book Booking.com]({url})" if url != "#" else "—"
+            lines.append(f"| {row_idx} | **{name}** | Booking.com | {rate} | {score} | {badges} | {link_md} |")
+            row_idx += 1
+
+        for h in hotels_a[:5]:
+            name = h.get("name", "Unknown")
+            rate = (
+                h.get("vip_price_text")
+                or h.get("price_text")
+                or (f"{h.get('currency')} {h.get('total_price'):.2f}" if h.get("total_price") else "Check rate")
+            )
+            if h.get("is_vip_deal"):
+                rate += f" *(VIP -{int(h.get('vip_discount_rate', 0.25) * 100)}%)*"
+            score = f"{h.get('rating'):.1f}/10" if h.get("rating") else "N/A"
+            badges = ", ".join(h.get("badges", [])) or "—"
+            url = h.get("url", "#")
+            link_md = f"[Book Agoda]({url})" if url != "#" else "—"
+            lines.append(f"| {row_idx} | **{name}** | Agoda | {rate} | {score} | {badges} | {link_md} |")
+            row_idx += 1
+
+        lines.extend(
+            [
+                "",
+                "💡 *Tip: Loyalty discounts (Genius Level 3 on Booking.com & AgodaVIP Platinum on Agoda) are pre-calculated.*",
+            ]
+        )
+
+        return "\n".join(lines)
+
+
 async def handle_council_query(query: str) -> str:
     """Execute AI Council deliberation via scripts/ai_council.py."""
     if not query.strip():
@@ -638,8 +761,9 @@ if cl is not None:
                 help_md = """### 📖 Available Slash Commands
 
 - `/trips` - List current Wanderlog trips
+- `/hotels <city> [checkin] [checkout]` - Compare Booking.com & Agoda side-by-side
 - `/hotel <city> [checkin] [checkout]` - Search Booking.com (with Genius Lv3 discounts)
-- `/agoda <city> [checkin] [checkout]` - Search Agoda lodging
+- `/agoda <city> [checkin] [checkout]` - Search Agoda lodging (with AgodaVIP discounts)
 - `/council <question>` - Ask the Claude & DeepSeek AI Travel Council
 - `/status` - Check authentication status for all services
 - `/help` - Show this help menu
@@ -651,6 +775,11 @@ if cl is not None:
 
             elif cmd == "/trips":
                 res = await handle_trips_list()
+                await cl.Message(content=res).send()
+                return
+
+            elif cmd in ("/hotels", "/compare"):
+                res = await handle_compare_hotels(args)
                 await cl.Message(content=res).send()
                 return
 
