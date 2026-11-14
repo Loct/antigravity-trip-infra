@@ -68,13 +68,14 @@ def test_agoda_config_resolution(monkeypatch):
     monkeypatch.setenv("APIFY_TOKEN", "test-apify-token")
     monkeypatch.setenv("AGODA_SESSION_COOKIE", "agoda_session=xyz")
     monkeypatch.setenv("AGODA_RAPIDAPI_HOST", "agoda-custom.p.rapidapi.com")
+    monkeypatch.setenv("APIFY_AGODA_ACTOR", "custom/test-scraper")
 
     cfg = AgodaConfig()
     assert cfg.api_key == "test-agoda-key"
     assert cfg.apify_token == "test-apify-token"
     assert cfg.session_cookie == "agoda_session=xyz"
     assert cfg.rapidapi_host == "agoda-custom.p.rapidapi.com"
-    assert cfg.apify_actor == "tri_angle/agoda-scraper"
+    assert cfg.apify_actor == "custom/test-scraper"
 
 
 def test_search_rapidapi_mocked():

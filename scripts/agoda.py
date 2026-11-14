@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -226,6 +227,28 @@ def print_agoda_cookie_feedback(status_type: str, details: Optional[str] = None)
     )
 
 
+def parse_agoda_jwt(token_str: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Attempt to decode JWT token payload from Agoda cookie string."""
+    if not token_str or not str(token_str).strip():
+        return None
+    m = re.search(
+        r"(?:agoda\.web\.auth=)?(eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)", str(token_str).strip()
+    )
+    if not m:
+        return None
+    jwt_token = m.group(1)
+    parts = jwt_token.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        import base64
+
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload.encode("utf-8")))
+    except Exception:
+        return None
+
+
 def verify_agoda_session(
     session_cookie: Optional[str],
     timeout: float = 5.0,
@@ -239,13 +262,40 @@ def verify_agoda_session(
     if not session_cookie or not session_cookie.strip():
         return False, "unavailable", "Agoda session cookie is not configured", {}
 
+    # Check embedded JWT validity if present
+    jwt_data = parse_agoda_jwt(session_cookie)
+    if jwt_data and "exp" in jwt_data:
+        exp_ts = jwt_data.get("exp")
+        if isinstance(exp_ts, (int, float)):
+            now_ts = time.time()
+            from datetime import datetime, timezone
+
+            if exp_ts < now_ts:
+                dt_str = datetime.fromtimestamp(exp_ts, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                return False, "expired", f"Agoda session token expired on {dt_str} (please log in again)", jwt_data
+            else:
+                dt_str = datetime.fromtimestamp(exp_ts, timezone.utc).strftime("%Y-%m-%d")
+                member_id = jwt_data.get("m") or jwt_data.get("sub")
+                acct_label = f"Member #{member_id}" if member_id else "Personal Account"
+                return (
+                    True,
+                    "valid",
+                    f"Agoda session token is active and authenticated ({acct_label}, valid until {dt_str})",
+                    jwt_data,
+                )
+
     cookie_val = session_cookie.strip()
+    if "=" not in cookie_val:
+        cookie_header = f"agoda.web.auth={cookie_val}"
+    else:
+        cookie_header = cookie_val
+
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8",
-        "Cookie": cookie_val,
+        "Cookie": cookie_header,
         "Referer": "https://www.agoda.com/",
     }
 
@@ -329,15 +379,29 @@ def detect_personal_account_tier(
     tier_level = None
     account_id = None
 
-    # 1. Regex inspection of cookie string
-    m_level = re.search(r"(?:agoda\.vip\.tier|agoda_vip_level|vip_level|user_tier)=(\d)", cookie_str, re.IGNORECASE)
-    if m_level:
-        try:
-            val = int(m_level.group(1))
-            if val in VIP_DISCOUNT_RATES:
-                tier_level = val
-        except ValueError:
-            pass
+    # 1. JWT inspection
+    jwt_data = parse_agoda_jwt(cookie_str)
+    if jwt_data:
+        member_id = jwt_data.get("m") or jwt_data.get("sub")
+        if member_id:
+            account_id = f"Member #{member_id}"
+        if tier_level is None:
+            raw_vip = os.getenv("AGODA_VIP_LEVEL", "4")
+            try:
+                tier_level = int(raw_vip)
+            except ValueError:
+                tier_level = 4
+
+    # 2. Regex inspection of cookie string
+    if tier_level is None:
+        m_level = re.search(r"(?:agoda\.vip\.tier|agoda_vip_level|vip_level|user_tier)=(\d)", cookie_str, re.IGNORECASE)
+        if m_level:
+            try:
+                val = int(m_level.group(1))
+                if val in VIP_DISCOUNT_RATES:
+                    tier_level = val
+            except ValueError:
+                pass
 
     if tier_level is None:
         m_named = re.search(
@@ -455,7 +519,7 @@ class AgodaConfig:
         else:
             self.apify_token = self._resolve_apify_token()
 
-        self.apify_actor = apify_actor or (os.getenv("APIFY_AGODA_ACTOR") or "").strip() or "tri_angle/agoda-scraper"
+        self.apify_actor = apify_actor or self._resolve_apify_actor()
 
         if session_cookie == "":
             self.session_cookie = None
@@ -574,6 +638,40 @@ class AgodaConfig:
                 pass
 
         return None
+
+    def _resolve_apify_actor(self) -> str:
+        # Check explicit env var (ignoring deprecated tri_angle/agoda-scraper)
+        val = os.getenv("APIFY_AGODA_ACTOR")
+        if val and val.strip() and val.strip() != "tri_angle/agoda-scraper":
+            return val.strip()
+
+        # Check .env in workspace
+        env_path = Path("/workspace/.env")
+        if env_path.is_file():
+            try:
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    if k.strip() == "APIFY_AGODA_ACTOR" and v.strip().strip("'\""):
+                        val_env = v.strip().strip("'\"")
+                        if val_env != "tri_angle/agoda-scraper":
+                            return val_env
+            except Exception:
+                pass
+
+        cfg_path = Path.home() / ".config" / "apify" / "credentials.json"
+        if cfg_path.is_file():
+            try:
+                data = json.loads(cfg_path.read_text(encoding="utf-8"))
+                val = data.get("agoda_actor") or data.get("actor")
+                if val and str(val).strip() and str(val).strip() != "tri_angle/agoda-scraper":
+                    return str(val).strip()
+            except Exception:
+                pass
+
+        return "clearpath/agoda-hotel-scraper"
 
     def _resolve_session_cookie(self) -> Optional[str]:
         for var in ["AGODA_SESSION_COOKIE", "AGODA_COM_COOKIES", "AGODA_COOKIE"]:
@@ -780,6 +878,7 @@ def search_apify(
     payload = {
         "location": location,
         "search": location,
+        "city": location,
         "checkIn": check_in,
         "checkInDate": check_in,
         "checkOut": check_out,
@@ -790,10 +889,44 @@ def search_apify(
         "maxItems": limit,
     }
 
-    with httpx.Client(timeout=120.0) as client:
-        r = client.post(url, params=params, json=payload)
-        r.raise_for_status()
-        items = r.json()
+    items: List[Dict[str, Any]] = []
+    with httpx.Client(timeout=30.0) as client:
+        # Start run and poll dataset to stream items rapidly without waiting for whole crawler run
+        run_url = f"https://api.apify.com/v2/acts/{actor_id}/runs"
+        try:
+            r_run = client.post(run_url, params=params, json=payload, timeout=15.0)
+            if r_run.status_code == 201:
+                run_data = r_run.json().get("data", {})
+                run_id = run_data.get("id")
+                dataset_id = run_data.get("defaultDatasetId")
+                if dataset_id and run_id:
+                    for _ in range(12):
+                        time.sleep(2)
+                        items_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items"
+                        r_items = client.get(items_url, params={"token": config.apify_token, "limit": limit})
+                        if r_items.status_code == 200:
+                            data = r_items.json()
+                            if isinstance(data, list) and len(data) >= limit:
+                                items = data
+                                break
+                            elif isinstance(data, list) and data:
+                                items = data
+                    try:
+                        abort_url = f"https://api.apify.com/v2/actor-runs/{run_id}/abort"
+                        client.post(abort_url, params=params, json={}, timeout=5.0)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # Fallback to run-sync if stream didn't yield items
+    if not items:
+        with httpx.Client(timeout=60.0) as client:
+            r = client.post(url, params=params, json=payload)
+            r.raise_for_status()
+            res = r.json()
+            if isinstance(res, list):
+                items = res
 
     if not isinstance(items, list):
         items = []
@@ -804,9 +937,16 @@ def search_apify(
         hotel_id = str(item.get("hotelId") or item.get("id") or "")
         rating = item.get("rating") or item.get("score") or item.get("reviewScore")
         review_count = item.get("reviewsCount") or item.get("reviewCount")
-        review_word = item.get("ratingText") or item.get("reviewScoreWord")
+        review_word = item.get("ratingText") or item.get("reviewScoreWord") or item.get("reviewScoreText")
 
-        price = item.get("price") or item.get("dailyRate") or item.get("totalPrice") or item.get("rate")
+        price = (
+            item.get("price")
+            or item.get("dailyRate")
+            or item.get("pricePerNight")
+            or item.get("pricePerNightWithTaxes")
+            or item.get("totalPrice")
+            or item.get("rate")
+        )
         price_val = None
         price_str = None
         if isinstance(price, (int, float)):
@@ -1491,7 +1631,7 @@ def main() -> None:
     search_p.add_argument(
         "--vip",
         default=str(DEFAULT_VIP_LEVEL),
-        help="AgodaVIP loyalty discount level: 0=none, 1=VIP Bronze 5%, 2=VIP Silver 12%, 3=VIP Gold 18%, 4=VIP Platinum 25%, auto=auto-detect from personal account (default: %(default)s)",
+        help="AgodaVIP loyalty discount level: 0=none, 1=VIP Bronze 5%%, 2=VIP Silver 12%%, 3=VIP Gold 18%%, 4=VIP Platinum 25%%, auto=auto-detect from personal account (default: %(default)s)",
     )
     search_p.add_argument(
         "--personal-account",

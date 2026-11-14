@@ -65,6 +65,7 @@ def test_handle_status_configured():
         "WANDERLOG_AUTH_SESSION_COOKIE": "test_cookie",
         "BOOKING_SESSION_COOKIE": "test_bkng",
         "AGODA_API_KEY": "test_agoda_key",
+        "AGODA_SESSION_COOKIE": "",
         "ANTHROPIC_API_KEY": "sk-ant-test",
         "OPENROUTER_API_KEY": "sk-or-test",
         "GH_TOKEN": "ghp_test",
