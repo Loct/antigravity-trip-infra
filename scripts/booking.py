@@ -362,11 +362,11 @@ def search_scrape(
                 "and running './scripts/login_booking.sh'."
             )
         if r.status_code == 401 or ("signin" in str(r.url).lower() and "/searchresults.html" not in str(r.url).lower()):
-            print_booking_cookie_feedback("expired", f"Redirected to signin: {r.url}")
+            clean_url = str(r.url).split("?")[0]
+            print_booking_cookie_feedback("expired", f"Redirected to signin endpoint: {clean_url}")
             raise PermissionError(
-                "Booking.com session cookie has expired or was rejected (session challenge or verification required).\n"
-                "Please update your BOOKING_SESSION_COOKIE by copying the latest 'bkng_sso_session' cookie "
-                "from your logged-in browser and running './scripts/login_booking.sh'."
+                "Booking.com session cookie has expired (session challenge or verification required).\n"
+                "You must log into Booking.com again in your browser and run './scripts/login_booking.sh' to update your cookie."
             )
         r.raise_for_status()
 
@@ -676,18 +676,14 @@ def run_status_check(config: BookingConfig, live_verify: bool = True) -> None:
 
     # 1. Session Cookie
     if config.session_cookie:
-        masked = (
-            config.session_cookie[:15] + "..." + config.session_cookie[-6:]
-            if len(config.session_cookie) > 25
-            else "***"
-        )
+        cookie_label = f"BOOKING_SESSION_COOKIE ({len(config.session_cookie)} chars)"
         if live_verify:
             is_valid, reason, msg = verify_booking_session(config.session_cookie)
             if is_valid:
                 table.add_row(
                     "Session Cookie",
                     "[bold green]Active & Valid[/bold green]",
-                    f"Verified ({len(config.session_cookie)} chars): {masked}",
+                    f"Verified: {cookie_label}",
                 )
             elif reason == "expired":
                 table.add_row(
@@ -709,13 +705,13 @@ def run_status_check(config: BookingConfig, live_verify: bool = True) -> None:
                 table.add_row(
                     "Session Cookie",
                     "[green]Configured[/green]",
-                    f"Active ({len(config.session_cookie)} chars, check skipped): {masked}",
+                    f"Active ({cookie_label}, check skipped)",
                 )
         else:
             table.add_row(
                 "Session Cookie",
                 "[green]Configured[/green]",
-                f"Active ({len(config.session_cookie)} chars): {masked}",
+                f"Active: {cookie_label}",
             )
     else:
         table.add_row(

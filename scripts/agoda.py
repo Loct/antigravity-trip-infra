@@ -1328,11 +1328,10 @@ def run_status_check(config: AgodaConfig, live_verify: bool = True) -> None:
 
     # 1. RapidAPI
     if config.api_key:
-        masked_key = config.api_key[:4] + "..." + config.api_key[-4:] if len(config.api_key) > 8 else "***"
         table.add_row(
             "RapidAPI / Agoda Key",
             "[green]Configured[/green]",
-            f"Key: {masked_key} | Host: {config.rapidapi_host}",
+            f"Key: {'*' * 8} ({len(config.api_key)} chars) | Host: {config.rapidapi_host}",
         )
     else:
         table.add_row(
@@ -1343,11 +1342,10 @@ def run_status_check(config: AgodaConfig, live_verify: bool = True) -> None:
 
     # 2. Apify
     if config.apify_token:
-        masked_tok = config.apify_token[:6] + "..." + config.apify_token[-4:] if len(config.apify_token) > 10 else "***"
         table.add_row(
             "Apify Token",
             "[green]Configured[/green]",
-            f"Token: {masked_tok} | Actor: {config.apify_actor}",
+            f"Token: {'*' * 8} ({len(config.apify_token)} chars) | Actor: {config.apify_actor}",
         )
     else:
         table.add_row(
