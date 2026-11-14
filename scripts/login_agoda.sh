@@ -25,7 +25,7 @@ echo ""
 echo "Choose a setup method for Agoda:"
 echo "  1) Configure RapidAPI / Agoda API Key (Recommended for structured hotel search & rates)"
 echo "  2) Configure Apify Personal API Token (Recommended fallback scraper)"
-echo "  3) Configure Browser Session Cookie (for web session access)"
+echo "  3) Configure Personal Account & Session Cookie (Auto-detects AgodaVIP loyalty tier)"
 echo "  4) Check current Agoda configuration & connectivity status"
 echo "  5) Test Hotel Search"
 echo ""
@@ -170,6 +170,22 @@ EOF
 chmod 600 /root/.config/agoda/credentials.json"
 
     echo "[-] Saved Agoda session cookie to .env and /root/.config/agoda/credentials.json."
+
+    read -r -p "Enable automatic AgodaVIP tier detection from personal account? [Y/n]: " AUTO_VIP_OPT || true
+    AUTO_VIP_OPT="${AUTO_VIP_OPT:-y}"
+    if [[ "$AUTO_VIP_OPT" =~ ^[Yy] ]]; then
+      if grep -q "^AGODA_AUTO_DETECT_VIP=" .env; then
+        sed -i.bak "s|^AGODA_AUTO_DETECT_VIP=.*|AGODA_AUTO_DETECT_VIP=true|" .env
+        rm -f .env.bak
+      else
+        echo "AGODA_AUTO_DETECT_VIP=true" >>.env
+      fi
+      echo "[-] Enabled AGODA_AUTO_DETECT_VIP=true in .env."
+    fi
+
+    echo ""
+    echo "[-] Checking personal account verification & detected AgodaVIP loyalty tier:"
+    docker compose exec -T "$SERVICE_NAME" uv run scripts/agoda.py status || true
     ;;
 
   4)

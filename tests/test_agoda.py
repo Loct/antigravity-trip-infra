@@ -21,6 +21,10 @@ from agoda import (
     AgodaConfig,
     Hotel,
     add_lodging_to_wanderlog,
+    apply_vip_discount,
+    build_agoda_hotel_url,
+    detect_personal_account_tier,
+    print_personal_account_setup_prompt,
     run_status_check,
     search_apify,
     search_hotels,
@@ -226,9 +230,159 @@ def test_add_lodging_to_wanderlog_cmd():
 
 
 def test_status_check():
-    cfg = AgodaConfig(api_key="test-key", apify_token=None, session_cookie=None)
+    cfg = AgodaConfig(api_key="test-key", apify_token=None, session_cookie=None, vip_level=4)
     # Ensure run_status_check executes cleanly
     run_status_check(cfg)
+
+
+def test_build_agoda_hotel_url():
+    # 1. Search link from name and dates
+    url1 = build_agoda_hotel_url(
+        name="Hotel Gracery Shinjuku",
+        check_in="2026-12-01",
+        check_out="2026-12-05",
+        guests=2,
+        rooms=1,
+    )
+    assert "https://www.agoda.com/search" in url1
+    assert "checkIn=2026-12-01" in url1
+    assert "checkOut=2026-12-05" in url1
+    assert "adults=2" in url1
+    assert "rooms=1" in url1
+    assert "text=Hotel+Gracery+Shinjuku" in url1
+
+    # 2. Replaces broken placeholder /hotel/<id>.html with valid deeplink
+    url2 = build_agoda_hotel_url(
+        name="Kyoto Machiya Stay",
+        canonical_url="https://www.agoda.com/hotel/12345.html",
+        hotel_id="12345",
+        check_in="2026-12-01",
+        check_out="2026-12-05",
+    )
+    assert "/hotel/12345.html" not in url2
+    assert "https://www.agoda.com/search" in url2
+    assert "hotel=12345" in url2
+
+    # 3. Preserves legitimate canonical Agoda property URL
+    valid_property_url = "https://www.agoda.com/en-gb/hotel-gracery-shinjuku/hotel/tokyo-jp.html"
+    url3 = build_agoda_hotel_url(
+        name="Hotel Gracery Shinjuku",
+        canonical_url=valid_property_url,
+        check_in="2026-12-01",
+        check_out="2026-12-05",
+    )
+    assert "hotel-gracery-shinjuku/hotel/tokyo-jp.html" in url3
+    assert "checkIn=2026-12-01" in url3
+
+
+def test_apply_vip_discount():
+    # Platinum: 25% off
+    h1 = Hotel(name="Test Stay", hotel_id="1", total_price=400.0, currency="EUR")
+    h1_disc = apply_vip_discount(h1, vip_level=4)
+    assert h1_disc.is_vip_deal is True
+    assert h1_disc.vip_discount_rate == 0.25
+    assert h1_disc.vip_price == 300.0
+    assert h1_disc.vip_price_text == "EUR 300.00"
+    assert "VIP Platinum Deal (-25%)" in h1_disc.badges
+
+    # Silver: 12% off
+    h2 = Hotel(name="Test Stay 2", hotel_id="2", total_price=100.0, currency="USD")
+    h2_disc = apply_vip_discount(h2, vip_level=2)
+    assert h2_disc.is_vip_deal is True
+    assert h2_disc.vip_discount_rate == 0.12
+    assert h2_disc.vip_price == 88.0
+    assert "VIP Silver Deal (-12%)" in h2_disc.badges
+
+    # Level 0: No discount
+    h3 = Hotel(name="Test Stay 3", hotel_id="3", total_price=200.0)
+    h3_disc = apply_vip_discount(h3, vip_level=0)
+    assert h3_disc.is_vip_deal is False
+    assert h3_disc.vip_price is None
+
+
+def test_search_hotels_vip_applied():
+    cfg = AgodaConfig(api_key="", apify_token="mock-token", vip_level=4)
+    with patch("agoda.search_apify") as mock_apify:
+        mock_apify.return_value = [Hotel(name="Luxury Stay", hotel_id="555", total_price=200.0, currency="EUR")]
+        results, provider = search_hotels(
+            location="Osaka",
+            check_in="2026-12-01",
+            check_out="2026-12-05",
+            config=cfg,
+        )
+        assert len(results) == 1
+        h = results[0]
+        assert h.is_vip_deal is True
+        assert h.vip_price == 150.0  # 200 - 25%
+        assert "VIP Platinum Deal (-25%)" in h.badges
+
+
+def test_detect_personal_account_tier_from_cookie():
+    # Direct numeric VIP tier in cookie
+    c1 = "agoda.vip.tier=3; user_email=traveler%40example.com; agoda_session=abc"
+    tier, name, user = detect_personal_account_tier(c1)
+    assert tier == 3
+    assert name == "VIP Gold"
+    assert user == "traveler@example.com"
+
+    # Named tier in cookie
+    c2 = "vip_status=platinum; email=vip_traveler%40world.org"
+    tier2, name2, user2 = detect_personal_account_tier(c2)
+    assert tier2 == 4
+    assert name2 == "VIP Platinum"
+    assert user2 == "vip_traveler@world.org"
+
+
+def test_detect_personal_account_tier_none():
+    assert detect_personal_account_tier(None) == (None, None, None)
+    assert detect_personal_account_tier("") == (None, None, None)
+    assert detect_personal_account_tier("random_cookie=123") == (None, None, None)
+
+
+def test_detect_personal_account_tier_api_mock():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "vipStatus": "Silver",
+        "email": "silver_member@example.com",
+    }
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        tier, name, user = detect_personal_account_tier("agoda.web.auth=token_xyz")
+        assert tier == 2
+        assert name == "VIP Silver"
+        assert user == "silver_member@example.com"
+
+
+def test_agoda_config_personal_account_auto_detection():
+    # Session cookie with VIP Gold
+    cfg = AgodaConfig(
+        session_cookie="agoda.vip.tier=3; user_email=alex%40test.org",
+        personal_account=True,
+    )
+    assert cfg.personal_account_detected is True
+    assert cfg.personal_account_id == "alex@test.org"
+    assert cfg.detected_vip_tier == "VIP Gold"
+    assert cfg.vip_level == 3
+    assert cfg.prompt_personal_account_setup is False
+
+
+def test_agoda_config_personal_account_prompt_needed():
+    # No session cookie when personal_account is requested
+    cfg = AgodaConfig(session_cookie="", personal_account=True)
+    assert cfg.personal_account_detected is False
+    assert cfg.prompt_personal_account_setup is True
+    assert cfg.vip_level == 4  # Graceful fallback
+
+
+def test_print_personal_account_setup_prompt():
+    # Ensure it prints cleanly without errors
+    print_personal_account_setup_prompt()
 
 
 if __name__ == "__main__":
