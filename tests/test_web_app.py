@@ -78,6 +78,17 @@ def test_handle_status_configured():
         assert "Chat Persistence" in status
 
 
+def test_handle_status_agoda_personal_account_detected():
+    """Verify status report recognizes personal account with auto-detected VIP tier."""
+    mock_env = {
+        "AGODA_SESSION_COOKIE": "agoda.vip.tier=3; user_email=alex%40example.com",
+    }
+    with patch.dict(os.environ, mock_env):
+        status = asyncio.run(handle_status())
+        assert "Personal account connected" in status
+        assert "VIP Gold auto-detected" in status
+
+
 def test_sqlite_db_init(tmp_path):
     """Verify that init_sqlite_db initializes all required Chainlit tables and columns."""
     import sqlite3

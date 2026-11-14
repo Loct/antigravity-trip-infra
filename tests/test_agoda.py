@@ -23,6 +23,8 @@ from agoda import (
     add_lodging_to_wanderlog,
     apply_vip_discount,
     build_agoda_hotel_url,
+    detect_personal_account_tier,
+    print_personal_account_setup_prompt,
     run_status_check,
     search_apify,
     search_hotels,
@@ -313,6 +315,74 @@ def test_search_hotels_vip_applied():
         assert h.is_vip_deal is True
         assert h.vip_price == 150.0  # 200 - 25%
         assert "VIP Platinum Deal (-25%)" in h.badges
+
+
+def test_detect_personal_account_tier_from_cookie():
+    # Direct numeric VIP tier in cookie
+    c1 = "agoda.vip.tier=3; user_email=traveler%40example.com; agoda_session=abc"
+    tier, name, user = detect_personal_account_tier(c1)
+    assert tier == 3
+    assert name == "VIP Gold"
+    assert user == "traveler@example.com"
+
+    # Named tier in cookie
+    c2 = "vip_status=platinum; email=vip_traveler%40world.org"
+    tier2, name2, user2 = detect_personal_account_tier(c2)
+    assert tier2 == 4
+    assert name2 == "VIP Platinum"
+    assert user2 == "vip_traveler@world.org"
+
+
+def test_detect_personal_account_tier_none():
+    assert detect_personal_account_tier(None) == (None, None, None)
+    assert detect_personal_account_tier("") == (None, None, None)
+    assert detect_personal_account_tier("random_cookie=123") == (None, None, None)
+
+
+def test_detect_personal_account_tier_api_mock():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "vipStatus": "Silver",
+        "email": "silver_member@example.com",
+    }
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        tier, name, user = detect_personal_account_tier("agoda.web.auth=token_xyz")
+        assert tier == 2
+        assert name == "VIP Silver"
+        assert user == "silver_member@example.com"
+
+
+def test_agoda_config_personal_account_auto_detection():
+    # Session cookie with VIP Gold
+    cfg = AgodaConfig(
+        session_cookie="agoda.vip.tier=3; user_email=alex%40test.org",
+        personal_account=True,
+    )
+    assert cfg.personal_account_detected is True
+    assert cfg.personal_account_id == "alex@test.org"
+    assert cfg.detected_vip_tier == "VIP Gold"
+    assert cfg.vip_level == 3
+    assert cfg.prompt_personal_account_setup is False
+
+
+def test_agoda_config_personal_account_prompt_needed():
+    # No session cookie when personal_account is requested
+    cfg = AgodaConfig(session_cookie="", personal_account=True)
+    assert cfg.personal_account_detected is False
+    assert cfg.prompt_personal_account_setup is True
+    assert cfg.vip_level == 4  # Graceful fallback
+
+
+def test_print_personal_account_setup_prompt():
+    # Ensure it prints cleanly without errors
+    print_personal_account_setup_prompt()
 
 
 if __name__ == "__main__":

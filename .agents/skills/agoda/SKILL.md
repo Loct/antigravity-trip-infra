@@ -42,7 +42,14 @@ Agoda provides VIP tiers with automatic discounts applied to hotel searches:
 - **Level 4 (VIP Platinum)**: ~25% discount *(Default)*
 - **Level 0**: Standard public pricing (no discount)
 
-Configured via `AGODA_VIP_LEVEL` in `.env` or `--vip <0-4>` CLI argument. When active, results highlight VIP discounted rates and savings badges alongside standard rates.
+Configured via `AGODA_VIP_LEVEL` in `.env` or `--vip <0-4>` CLI argument.
+
+### Personal Account & Auto-Tier Detection
+You can use your personal Agoda account to automatically detect your real VIP tier:
+- Pass `--personal-account` or `--vip auto` during search.
+- Or set `AGODA_AUTO_DETECT_VIP=true` or `AGODA_VIP_LEVEL=auto` in `.env`.
+- When linked, the CLI connects via `AGODA_SESSION_COOKIE`, resolves your tier (Bronze, Silver, Gold, or Platinum), and applies the exact loyalty discount with member badges.
+- **If not linked yet**: The CLI automatically displays a helpful setup prompt guiding you to run `./scripts/login_agoda.sh` (Option 3) to extract and paste your session cookie, gracefully falling back to standard rates without breaking.
 
 ### Valid Direct URL Requirements
 Never generate broken placeholder URLs such as `agoda.com/hotel/<id>.html`. The integration uses `build_agoda_hotel_url` to construct canonical URLs with pre-populated check-in/check-out dates, guest counts, room counts, and property search parameters.

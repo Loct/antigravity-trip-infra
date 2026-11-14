@@ -316,12 +316,26 @@ async def handle_status() -> str:
     agoda_cookie = os.getenv("AGODA_SESSION_COOKIE", "")
     apify_tok = os.getenv("APIFY_TOKEN", "")
     agoda_vip = os.getenv("AGODA_VIP_LEVEL", "4")
-    if agoda_key:
+    auto_vip = (
+        os.getenv("AGODA_AUTO_DETECT_VIP", "").lower() in ("1", "true", "yes") or str(agoda_vip).lower() == "auto"
+    )
+
+    if agoda_cookie:
+        from agoda import detect_personal_account_tier
+
+        tier_lvl, tier_nm, acct_id = detect_personal_account_tier(agoda_cookie)
+        if tier_lvl and tier_nm:
+            lines.append(f"- ✅ **Agoda**: Personal account connected ({acct_id or 'Member'}, {tier_nm} auto-detected)")
+        else:
+            lines.append(f"- ✅ **Agoda**: Authenticated via session cookie (AgodaVIP Level {agoda_vip})")
+    elif auto_vip:
+        lines.append(
+            "- ℹ️ **Agoda**: Personal account VIP auto-detection enabled (cookie not yet linked; run `./scripts/login_agoda.sh` Option 3)"
+        )
+    elif agoda_key:
         lines.append(f"- ✅ **Agoda**: API key configured (AgodaVIP Level {agoda_vip})")
     elif apify_tok:
         lines.append(f"- ✅ **Agoda**: Apify scraper configured (AgodaVIP Level {agoda_vip})")
-    elif agoda_cookie:
-        lines.append(f"- ✅ **Agoda**: Authenticated via session cookie (AgodaVIP Level {agoda_vip})")
     else:
         lines.append(f"- ℹ️ **Agoda**: Direct web mode active (AgodaVIP Level {agoda_vip})")
 

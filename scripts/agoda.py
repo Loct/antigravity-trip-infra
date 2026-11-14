@@ -42,7 +42,15 @@ err_console = Console(stderr=True)
 
 
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", os.getenv("AGODA_CURRENCY", "EUR"))
-DEFAULT_VIP_LEVEL = int(os.getenv("AGODA_VIP_LEVEL", "4"))
+_raw_vip = os.getenv("AGODA_VIP_LEVEL", "4").strip().lower()
+if _raw_vip in ("auto", "personal"):
+    DEFAULT_VIP_LEVEL: Any = "auto"
+else:
+    try:
+        DEFAULT_VIP_LEVEL = int(_raw_vip)
+    except ValueError:
+        DEFAULT_VIP_LEVEL = 4
+
 VIP_DISCOUNT_RATES = {
     1: 0.05,  # VIP Bronze: ~5%
     2: 0.12,  # VIP Silver: ~12%
@@ -140,6 +148,114 @@ def apply_vip_discount(hotel: Hotel, vip_level: int = DEFAULT_VIP_LEVEL) -> Hote
     return hotel
 
 
+def detect_personal_account_tier(
+    session_cookie: Optional[str],
+) -> Tuple[Optional[int], Optional[str], Optional[str]]:
+    """
+    Detect AgodaVIP tier and account details from personal session cookie.
+    Returns: (vip_level [1..4], tier_name, account_identifier)
+    """
+    if not session_cookie or not session_cookie.strip():
+        return None, None, None
+
+    cookie_str = session_cookie.strip()
+    tier_level = None
+    account_id = None
+
+    # 1. Regex inspection of cookie string
+    m_level = re.search(r"(?:agoda\.vip\.tier|agoda_vip_level|vip_level|user_tier)=(\d)", cookie_str, re.IGNORECASE)
+    if m_level:
+        try:
+            val = int(m_level.group(1))
+            if val in VIP_DISCOUNT_RATES:
+                tier_level = val
+        except ValueError:
+            pass
+
+    if tier_level is None:
+        m_named = re.search(
+            r"(?:vip_tier|vip_status|agoda_vip|tier)=(platinum|gold|silver|bronze)", cookie_str, re.IGNORECASE
+        )
+        if m_named:
+            name_map = {"bronze": 1, "silver": 2, "gold": 3, "platinum": 4}
+            tier_level = name_map.get(m_named.group(1).lower())
+
+    m_user = re.search(r"(?:user_email|email|user_name|member_name)=([^;]+)", cookie_str, re.IGNORECASE)
+    if m_user:
+        account_id = urllib.parse.unquote(m_user.group(1).strip())
+
+    # 2. Query Agoda member profile endpoint if auth token is present
+    auth_indicators = ["agoda.web.auth", "agoda_session", "agoda_token", "auth_token", "session_id"]
+    if (any(ind in cookie_str.lower() for ind in auth_indicators) or tier_level is None) and tier_level is None:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Cookie": cookie_str,
+            "Referer": "https://www.agoda.com/",
+        }
+        for endpoint in [
+            "https://www.agoda.com/api/cronos/members/profile",
+            "https://www.agoda.com/api/v4/user/profile",
+        ]:
+            try:
+                with httpx.Client(timeout=4.0, headers=headers, follow_redirects=True) as client:
+                    r = client.get(endpoint)
+                    if r.status_code == 200:
+                        data = r.json()
+                        if isinstance(data, dict):
+                            raw_tier = (
+                                data.get("vipStatus")
+                                or data.get("vipTier")
+                                or data.get("loyaltyTier")
+                                or data.get("tier")
+                            )
+                            if raw_tier:
+                                if str(raw_tier).isdigit() and int(raw_tier) in VIP_DISCOUNT_RATES:
+                                    tier_level = int(raw_tier)
+                                else:
+                                    name_map = {"bronze": 1, "silver": 2, "gold": 3, "platinum": 4}
+                                    tier_level = name_map.get(str(raw_tier).strip().lower())
+
+                            raw_user = (
+                                data.get("email")
+                                or data.get("userName")
+                                or data.get("memberName")
+                                or data.get("firstName")
+                            )
+                            if raw_user:
+                                account_id = str(raw_user).strip()
+                            if tier_level:
+                                break
+            except Exception:
+                pass
+
+    tier_name = VIP_TIER_NAMES.get(tier_level) if tier_level else None
+    return tier_level, tier_name, account_id
+
+
+def print_personal_account_setup_prompt() -> None:
+    """Display instructions when a personal Agoda account needs to be set up."""
+    console.print(
+        Panel(
+            "[bold yellow]Personal Agoda Account Setup Needed[/bold yellow]\n\n"
+            "To auto-detect your AgodaVIP tier (Bronze, Silver, Gold, or Platinum) and access personal loyalty rates:\n\n"
+            "  1. Run the interactive Agoda setup wizard:\n"
+            "     [bold cyan]./scripts/login_agoda.sh[/bold cyan] (Choose [bold]Option 3[/bold]: Personal Account & Session Cookie)\n\n"
+            "  2. Follow the extraction steps:\n"
+            "     • Open [link=https://www.agoda.com]https://www.agoda.com[/link] in your browser and sign in.\n"
+            "     • Press [bold]F12[/bold] (DevTools) → [bold]Application / Storage[/bold] → [bold]Cookies[/bold] → [bold]https://www.agoda.com[/bold].\n"
+            "     • Copy the cookie string and paste it into the wizard (or save to [bold].env[/bold] as [bold]AGODA_SESSION_COOKIE[/bold]).\n\n"
+            "  3. Alternatively, you can set your VIP tier manually in [bold].env[/bold]:\n"
+            "     [bold cyan]AGODA_VIP_LEVEL=4[/bold cyan] (1=Bronze 5%, 2=Silver 12%, 3=Gold 18%, 4=Platinum 25%)\n\n"
+            "[dim]Note: Continuing search with default VIP tier / public pricing.[/dim]",
+            title="💡 Link Personal Agoda Account for Auto-VIP Tier",
+            border_style="yellow",
+        )
+    )
+
+
 class AgodaConfig:
     def __init__(
         self,
@@ -148,7 +264,8 @@ class AgodaConfig:
         apify_token: Any = _UNSET,
         apify_actor: Optional[str] = None,
         session_cookie: Any = _UNSET,
-        vip_level: int = DEFAULT_VIP_LEVEL,
+        vip_level: Any = _UNSET,
+        personal_account: bool = False,
     ):
         if api_key == "":
             self.api_key = None
@@ -180,7 +297,35 @@ class AgodaConfig:
         else:
             self.session_cookie = self._resolve_session_cookie()
 
-        self.vip_level = vip_level
+        # Resolve VIP level & Personal Account Auto-Detection
+        resolved_vip = vip_level if vip_level is not _UNSET else DEFAULT_VIP_LEVEL
+        auto_vip = (
+            personal_account
+            or str(resolved_vip).lower() in ("auto", "personal")
+            or os.getenv("AGODA_AUTO_DETECT_VIP", "").lower() in ("1", "true", "yes")
+        )
+
+        self.personal_account_detected = False
+        self.personal_account_id: Optional[str] = None
+        self.detected_vip_tier: Optional[str] = None
+        self.prompt_personal_account_setup = False
+
+        if auto_vip:
+            detected_tier, detected_name, account_id = detect_personal_account_tier(self.session_cookie)
+            if detected_tier is not None:
+                self.vip_level = detected_tier
+                self.personal_account_detected = True
+                self.personal_account_id = account_id
+                self.detected_vip_tier = detected_name
+            else:
+                self.prompt_personal_account_setup = True
+                # Fallback to VIP Platinum (4) or static level if defined
+                self.vip_level = 4
+        else:
+            try:
+                self.vip_level = int(resolved_vip)
+            except (ValueError, TypeError):
+                self.vip_level = 4
 
     def _resolve_api_key(self) -> Optional[str]:
         # Check env vars
@@ -756,14 +901,31 @@ def search_hotels(
     currency: str = DEFAULT_CURRENCY,
     limit: int = 10,
     provider: str = "auto",
-    vip_level: Optional[int] = None,
+    vip_level: Any = None,
+    personal_account: bool = False,
     config: Optional[AgodaConfig] = None,
 ) -> Tuple[List[Hotel], str]:
     """Search hotels across Agoda providers with hybrid fallback and AgodaVIP discounting."""
     if config is None:
-        config = AgodaConfig(vip_level=vip_level if vip_level is not None else DEFAULT_VIP_LEVEL)
+        config = AgodaConfig(
+            vip_level=vip_level if vip_level is not None else DEFAULT_VIP_LEVEL,
+            personal_account=personal_account,
+        )
+    elif personal_account:
+        config = AgodaConfig(
+            api_key=config.api_key,
+            rapidapi_host=config.rapidapi_host,
+            apify_token=config.apify_token,
+            apify_actor=config.apify_actor,
+            session_cookie=config.session_cookie,
+            vip_level=vip_level if vip_level is not None else "auto",
+            personal_account=True,
+        )
     elif vip_level is not None:
-        config.vip_level = vip_level
+        try:
+            config.vip_level = int(vip_level)
+        except (ValueError, TypeError):
+            config.vip_level = 4
 
     effective_vip = config.vip_level
 
@@ -1026,20 +1188,34 @@ def run_status_check(config: AgodaConfig) -> None:
 
     # 3. Session Cookie
     if config.session_cookie:
+        acct_label = f" | User: {config.personal_account_id}" if config.personal_account_id else ""
         table.add_row(
             "Session Cookie",
             "[green]Configured[/green]",
-            f"Length: {len(config.session_cookie)} chars (AGODA_SESSION_COOKIE)",
+            f"Active: {len(config.session_cookie)} chars (AGODA_SESSION_COOKIE){acct_label}",
         )
     else:
         table.add_row(
             "Session Cookie",
             "[yellow]Not Configured[/yellow]",
-            "Optional: Set AGODA_SESSION_COOKIE for web access",
+            "Optional: Set AGODA_SESSION_COOKIE to link personal account & auto-detect VIP tier",
         )
 
-    # 4. AgodaVIP Loyalty
-    if config.vip_level > 0 and config.vip_level in VIP_DISCOUNT_RATES:
+    # 4. AgodaVIP Loyalty & Personal Account
+    if config.personal_account_detected:
+        pct = int(VIP_DISCOUNT_RATES.get(config.vip_level, 0.25) * 100)
+        table.add_row(
+            "AgodaVIP Loyalty",
+            f"[green]{config.detected_vip_tier}[/green]",
+            f"Auto-detected from personal account ({config.personal_account_id or 'Member'}): -{pct}% VIP discount",
+        )
+    elif config.prompt_personal_account_setup:
+        table.add_row(
+            "AgodaVIP Loyalty",
+            "[yellow]Personal Account Needed[/yellow]",
+            "Run './scripts/login_agoda.sh' (Option 3) to link account and auto-detect VIP tier (Fallback: Level 4 Platinum)",
+        )
+    elif config.vip_level > 0 and config.vip_level in VIP_DISCOUNT_RATES:
         tier_name = VIP_TIER_NAMES.get(config.vip_level, f"VIP Level {config.vip_level}")
         pct = int(VIP_DISCOUNT_RATES[config.vip_level] * 100)
         table.add_row(
@@ -1051,7 +1227,7 @@ def run_status_check(config: AgodaConfig) -> None:
         table.add_row(
             "AgodaVIP Loyalty",
             "[yellow]Standard[/yellow]",
-            "Level 0 (No VIP discount). Set AGODA_VIP_LEVEL=1..4 in .env for VIP rates",
+            "Level 0 (No VIP discount). Set AGODA_VIP_LEVEL=1..4 in .env or run with --personal-account",
         )
 
     # 5. Wanderlog CLI
@@ -1108,10 +1284,13 @@ def main() -> None:
     )
     search_p.add_argument(
         "--vip",
-        type=int,
-        choices=[0, 1, 2, 3, 4],
-        default=DEFAULT_VIP_LEVEL,
-        help="AgodaVIP loyalty discount level (0=none, 1=VIP Bronze 5%, 2=VIP Silver 12%, 3=VIP Gold 18%, 4=VIP Platinum 25%, default: 4)",
+        default=str(DEFAULT_VIP_LEVEL),
+        help="AgodaVIP loyalty discount level: 0=none, 1=VIP Bronze 5%, 2=VIP Silver 12%, 3=VIP Gold 18%, 4=VIP Platinum 25%, auto=auto-detect from personal account (default: %(default)s)",
+    )
+    search_p.add_argument(
+        "--personal-account",
+        action="store_true",
+        help="Use personal account session cookie to auto-detect AgodaVIP loyalty tier",
     )
     search_p.add_argument("--limit", type=int, default=10, help="Max results to display (default: 10)")
     search_p.add_argument(
@@ -1161,6 +1340,7 @@ def main() -> None:
         apify_token=getattr(args, "apify_token", None),
         session_cookie=getattr(args, "session_cookie", None),
         vip_level=getattr(args, "vip", DEFAULT_VIP_LEVEL),
+        personal_account=getattr(args, "personal_account", False),
     )
 
     if args.subcommand == "status":
@@ -1168,6 +1348,15 @@ def main() -> None:
         sys.exit(0)
 
     if args.subcommand == "search":
+        if config.prompt_personal_account_setup:
+            print_personal_account_setup_prompt()
+        elif config.personal_account_detected:
+            pct = int(VIP_DISCOUNT_RATES.get(config.vip_level, 0.25) * 100)
+            console.print(
+                f"[bold green]👤 Personal Account Connected:[/bold green] {config.personal_account_id or 'Agoda Member'} "
+                f"({config.detected_vip_tier} Deal -{pct}% auto-applied)\n"
+            )
+
         today = datetime.date.today()
         check_in = args.check_in or (today + datetime.timedelta(days=14)).isoformat()
         check_out = args.check_out or (today + datetime.timedelta(days=18)).isoformat()
