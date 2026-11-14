@@ -94,7 +94,7 @@ Search outputs include canonical direct URLs for each property:
    ```bash
    uv run scripts/agoda.py search -l "<city>" -i <in> -o <out> -f json
    ```
-3. Synthesize side-by-side in a comparative overview table.
+3. Synthesize side-by-side in a comparative overview table that always displays both the price per night in euros (€/night) and total price in euros (€ total) with loyalty discounts (Genius Lv3 vs. AgodaVIP), ratings, amenities, and direct booking links.
 
 ---
 
