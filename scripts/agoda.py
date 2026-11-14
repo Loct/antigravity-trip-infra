@@ -889,10 +889,44 @@ def search_apify(
         "maxItems": limit,
     }
 
-    with httpx.Client(timeout=120.0) as client:
-        r = client.post(url, params=params, json=payload)
-        r.raise_for_status()
-        items = r.json()
+    items: List[Dict[str, Any]] = []
+    with httpx.Client(timeout=30.0) as client:
+        # Start run and poll dataset to stream items rapidly without waiting for whole crawler run
+        run_url = f"https://api.apify.com/v2/acts/{actor_id}/runs"
+        try:
+            r_run = client.post(run_url, params=params, json=payload, timeout=15.0)
+            if r_run.status_code == 201:
+                run_data = r_run.json().get("data", {})
+                run_id = run_data.get("id")
+                dataset_id = run_data.get("defaultDatasetId")
+                if dataset_id and run_id:
+                    for _ in range(12):
+                        time.sleep(2)
+                        items_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items"
+                        r_items = client.get(items_url, params={"token": config.apify_token, "limit": limit})
+                        if r_items.status_code == 200:
+                            data = r_items.json()
+                            if isinstance(data, list) and len(data) >= limit:
+                                items = data
+                                break
+                            elif isinstance(data, list) and data:
+                                items = data
+                    try:
+                        abort_url = f"https://api.apify.com/v2/actor-runs/{run_id}/abort"
+                        client.post(abort_url, params=params, json={}, timeout=5.0)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # Fallback to run-sync if stream didn't yield items
+    if not items:
+        with httpx.Client(timeout=60.0) as client:
+            r = client.post(url, params=params, json=payload)
+            r.raise_for_status()
+            res = r.json()
+            if isinstance(res, list):
+                items = res
 
     if not isinstance(items, list):
         items = []
