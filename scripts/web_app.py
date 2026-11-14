@@ -330,12 +330,12 @@ async def handle_status() -> str:
             lines.append(f"- ✅ **Agoda**: Personal account connected ({acct_id or 'Member'}, {tier_nm} auto-detected)")
         else:
             lines.append(f"- ✅ **Agoda**: Authenticated via session cookie (AgodaVIP Level {agoda_vip})")
+    elif agoda_key:
+        lines.append(f"- ✅ **Agoda**: API key configured (AgodaVIP Level {agoda_vip})")
     elif auto_vip:
         lines.append(
             "- ℹ️ **Agoda**: Personal account VIP auto-detection enabled (cookie not yet linked; run `./scripts/login_agoda.sh` Option 3)"
         )
-    elif agoda_key:
-        lines.append(f"- ✅ **Agoda**: API key configured (AgodaVIP Level {agoda_vip})")
     elif apify_tok:
         lines.append(f"- ✅ **Agoda**: Apify scraper configured (AgodaVIP Level {agoda_vip})")
     else:
