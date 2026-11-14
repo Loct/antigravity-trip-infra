@@ -426,6 +426,16 @@ def test_format_cookie_error_banner_agoda_expired():
     assert "./scripts/login_agoda.sh" in banner
 
 
+def test_format_cookie_error_banner_agoda_unset():
+    banner = format_cookie_error_banner(
+        "Agoda",
+        "RuntimeError: AGODA_SESSION_COOKIE is unset / not configured",
+    )
+    assert banner is not None
+    assert "Agoda Session Cookie Unset" in banner
+    assert "./scripts/login_agoda.sh" in banner
+
+
 def test_format_cookie_error_banner_agoda_challenge():
     banner = format_cookie_error_banner(
         "Agoda",

@@ -398,30 +398,48 @@ def format_cookie_error_banner(provider: str, error_text: str) -> Optional[str]:
     """Inspect error output and return a high-clarity markdown recovery banner if cookie is expired/missing."""
     err_lower = error_text.lower()
     if provider == "Booking.com":
-        if "session cookie is not configured" in err_lower or "unavailable" in err_lower:
+        if any(
+            term in err_lower for term in ["session cookie is not configured", "unavailable", "unset", "not configured"]
+        ):
             return (
-                "> ⚠️ **Booking.com Cookie Missing**\n"
-                "> `BOOKING_SESSION_COOKIE` is not configured. Run `./scripts/login_booking.sh` to link your browser cookie "
-                "and unlock Genius Level 3 (-20%) discounts."
+                "> ⚠️ **Booking.com Cookie Missing / Unset — Please Log In & Configure**\n"
+                "> `BOOKING_SESSION_COOKIE` is unset. **You need to log into Booking.com in your browser** to get your session cookie "
+                "and unlock Genius Level 3 (-20%) discounts.\n"
+                ">\n"
+                "> **Action Required (Log in & 30s Setup)**:\n"
+                "> 1. Open [booking.com](https://www.booking.com) in your browser and **log into your account**.\n"
+                "> 2. Run `./scripts/login_booking.sh` to save your session cookie (or set `BOOKING_SESSION_COOKIE` in `.env`)."
             )
         if any(term in err_lower for term in ["expired", "401", "challenge", "202", "403", "signin", "sign-in"]):
             return (
-                "> ⚠️ **Booking.com Session Cookie Expired or Blocked**\n"
-                "> Your Booking.com browser session cookie has expired or failed verification.\n"
+                "> ⚠️ **Booking.com Session Cookie Expired — Please Log In Again**\n"
+                "> Your Booking.com session has expired. **You must log in again to Booking.com in your browser** to refresh your session.\n"
                 ">\n"
-                "> **Quick Fix (30s)**:\n"
-                "> 1. Run `./scripts/login_booking.sh`\n"
-                "> 2. Or copy `bkng_sso_session` from DevTools (F12 -> Application -> Cookies -> booking.com) and update `.env`."
+                "> **Action Required (Re-login & 30s Fix)**:\n"
+                "> 1. Open [booking.com](https://www.booking.com) in your browser and **log into your account again**.\n"
+                "> 2. Run `./scripts/login_booking.sh` to update your session cookie (or update `BOOKING_SESSION_COOKIE` in `.env`)."
             )
     elif provider == "Agoda":
+        if any(
+            term in err_lower for term in ["session cookie is not configured", "unavailable", "unset", "not configured"]
+        ):
+            return (
+                "> ⚠️ **Agoda Session Cookie Unset — Please Log In & Configure**\n"
+                "> `AGODA_SESSION_COOKIE` is unset. **You need to log into Agoda in your browser** to get your session cookie "
+                "and auto-detect your AgodaVIP tier (up to -25%).\n"
+                ">\n"
+                "> **Action Required (Log in & 30s Setup)**:\n"
+                "> 1. Open [agoda.com](https://www.agoda.com) in your browser and **log into your account**.\n"
+                "> 2. Run `./scripts/login_agoda.sh` (Option 3: Personal Account & Session Cookie) to save `AGODA_SESSION_COOKIE` in `.env`."
+            )
         if any(term in err_lower for term in ["expired", "401", "unauthenticated", "signin", "login"]):
             return (
-                "> ⚠️ **Agoda Session Cookie Expired**\n"
-                "> Your Agoda personal session cookie has expired or was invalidated.\n"
+                "> ⚠️ **Agoda Session Cookie Expired — Please Log In Again**\n"
+                "> Your Agoda personal session has expired. **You must log in again to Agoda in your browser** to refresh your session.\n"
                 ">\n"
-                "> **Quick Fix (30s)**:\n"
-                "> 1. Run `./scripts/login_agoda.sh` (Option 3: Personal Account & Session Cookie)\n"
-                "> 2. Or copy `agoda.web.auth` from DevTools and update `AGODA_SESSION_COOKIE` in `.env`."
+                "> **Action Required (Re-login & 30s Fix)**:\n"
+                "> 1. Open [agoda.com](https://www.agoda.com) in your browser and **log into your account again**.\n"
+                "> 2. Run `./scripts/login_agoda.sh` (Option 3: Personal Account & Session Cookie) to update `AGODA_SESSION_COOKIE`."
             )
         if "challenge" in err_lower or "403" in err_lower:
             return (

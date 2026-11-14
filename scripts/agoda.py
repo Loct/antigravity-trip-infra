@@ -154,29 +154,48 @@ def print_agoda_cookie_feedback(status_type: str, details: Optional[str] = None)
     is expired, challenged, or unavailable.
     """
     if status_type == "expired":
-        title = "⚠️ Agoda Session Cookie Expired"
+        title = "⚠️ Agoda Session Cookie Expired — Please Log In Again"
         border_style = "bold red"
-        symptom = "Your Agoda session cookie has expired or was invalidated by Agoda."
+        symptom = (
+            "🔴 [bold red]SESSION EXPIRED: YOU MUST LOG IN AGAIN TO AGODA[/bold red]\n"
+            "Your Agoda personal session cookie has expired or was invalidated by Agoda.\n"
+            "You need to log into your account again in your browser to generate a fresh authenticated session."
+        )
+        action_header = "[bold cyan]⚡ Action Required: Re-authenticate / Log In Again[/bold cyan]"
+        step1_title = "Log into your account again in your browser"
         impact = (
             "AgodaVIP member tier (Bronze, Silver, Gold, Platinum - up to 25% off) cannot be auto-detected, "
             "and personal member rates cannot be verified. Searches will fall back to default VIP tiers or public pricing."
         )
     elif status_type == "challenge":
-        title = "🛡️ Agoda Security Challenge Triggered"
+        title = "🛡️ Agoda Security Challenge Triggered — Please Log In Again"
         border_style = "bold yellow"
-        symptom = "Agoda bot protection triggered (HTTP 403 or security verification required)."
+        symptom = (
+            "🛡️ [bold yellow]SECURITY CHALLENGE: PLEASE LOG IN AGAIN IN BROWSER[/bold yellow]\n"
+            "Agoda bot protection triggered (HTTP 403 or security verification required)."
+        )
+        action_header = "[bold cyan]⚡ Action Required: Pass Challenge & Re-authenticate[/bold cyan]"
+        step1_title = "Log in again in your browser to complete verification"
         impact = (
             "Direct member queries and searches are blocked until a fresh authenticated browser session is supplied."
         )
     elif status_type == "unavailable":
-        title = "❌ Agoda Session Cookie Not Configured"
+        title = "❌ Agoda Session Cookie Unset — Please Log In & Configure"
         border_style = "bold yellow"
-        symptom = "No Agoda session cookie ('AGODA_SESSION_COOKIE') was found in your environment or credentials."
+        symptom = (
+            "🟡 [bold yellow]SESSION COOKIE UNSET: PLEASE LOG IN TO AGODA[/bold yellow]\n"
+            "No Agoda session cookie ('AGODA_SESSION_COOKIE') is set in your environment or credentials.\n"
+            "You must log into Agoda in your browser to retrieve your session cookie and link your personal VIP account."
+        )
+        action_header = "[bold cyan]⚡ Action Required: Log In to Agoda & Configure Personal Account[/bold cyan]"
+        step1_title = "Log into Agoda in your browser"
         impact = "AgodaVIP personal loyalty discounts cannot be verified; searches fall back to default tiers or public rates."
     else:
         title = "⚠️ Agoda Session Verification Alert"
         border_style = "yellow"
         symptom = f"Agoda session status: {status_type}."
+        action_header = "[bold cyan]⚡ Action Required:[/bold cyan]"
+        step1_title = "Sign into your account in your browser"
         impact = "May affect personal loyalty pricing and auto-detection."
 
     details_line = f"\n[dim]Details: {details}[/dim]\n" if details else ""
@@ -185,15 +204,15 @@ def print_agoda_cookie_feedback(status_type: str, details: Optional[str] = None)
         f"[bold]{symptom}[/bold]\n"
         f"{details_line}\n"
         f"[bold]Impact:[/bold] {impact}\n\n"
-        "[bold cyan]⚡ Quick 30-Second Fix:[/bold cyan]\n"
-        "  1. Run the interactive Agoda setup wizard:\n"
-        "     [bold green]./scripts/login_agoda.sh[/bold green] (Choose [bold]Option 3[/bold]: Personal Account & Session Cookie)\n\n"
-        "  2. Or extract your fresh cookie from your browser:\n"
-        "     • Open [link=https://www.agoda.com]https://www.agoda.com[/link] in Chrome or Firefox and sign in.\n"
-        "     • Press [bold]F12[/bold] (DevTools) → [bold]Application[/bold] (Storage) → [bold]Cookies[/bold] → [bold]https://www.agoda.com[/bold].\n"
-        "     • Copy the full cookie string (or [bold]agoda.web.auth[/bold]).\n"
-        '     • Set in [bold].env[/bold]: [bold cyan]AGODA_SESSION_COOKIE="..."[/bold cyan]\n\n'
-        "  3. Verify your configuration:\n"
+        f"{action_header}\n"
+        f"  1. [bold yellow]{step1_title}:[/bold yellow]\n"
+        "     • Open [link=https://www.agoda.com]https://www.agoda.com[/link] in Chrome or Firefox and [bold underline]sign into your account[/bold underline].\n\n"
+        "  2. [bold yellow]Save your session cookie (choose one):[/bold yellow]\n"
+        "     • Run setup wizard: [bold green]./scripts/login_agoda.sh[/bold green] (Choose [bold]Option 3[/bold]: Personal Account & Session Cookie)\n"
+        "     • Or press [bold]F12[/bold] (DevTools) → [bold]Application[/bold] → [bold]Cookies[/bold] → [bold]https://www.agoda.com[/bold],\n"
+        "       copy [bold]agoda.web.auth[/bold] (or full Cookie header), and set in [bold].env[/bold]:\n"
+        '       [bold cyan]AGODA_SESSION_COOKIE="..."[/bold cyan]\n\n'
+        "  3. [bold yellow]Verify your session:[/bold yellow]\n"
         "     [bold green]uv run scripts/agoda.py status[/bold green]"
     )
 
@@ -267,10 +286,20 @@ def verify_agoda_session(
             return False, "expired", "Agoda account returned HTTP 401 Unauthorized", {}
         final_url = str(r_web.url).lower()
         if "signin" in final_url or "login" in final_url:
-            return False, "expired", "Agoda session cookie expired (redirected to signin.html)", {}
+            return (
+                False,
+                "expired",
+                "Agoda session cookie expired (redirected to signin.html; please log in again at https://www.agoda.com)",
+                {},
+            )
         if r_web.status_code == 200:
             if "signin" in r_web.text[:2000].lower() and "password" in r_web.text[:2000].lower():
-                return False, "expired", "Agoda login prompt detected on profile page", {}
+                return (
+                    False,
+                    "expired",
+                    "Agoda login prompt detected on profile page (please log in again at https://www.agoda.com)",
+                    {},
+                )
             return True, "valid", "Agoda session cookie is active and authenticated", {}
 
         return False, "network_error", f"Agoda returned unexpected HTTP {r_web.status_code}", {}
@@ -1341,7 +1370,7 @@ def run_status_check(config: AgodaConfig, live_verify: bool = True) -> None:
             elif reason == "expired":
                 table.add_row(
                     "Session Cookie",
-                    "[bold red]Expired / Invalid[/bold red]",
+                    "[bold red]Expired (Re-login Required)[/bold red]",
                     f"Session expired: {msg}",
                 )
                 cookie_feedback_type = "expired"
@@ -1369,8 +1398,8 @@ def run_status_check(config: AgodaConfig, live_verify: bool = True) -> None:
     else:
         table.add_row(
             "Session Cookie",
-            "[yellow]Not Configured[/yellow]",
-            "Optional: Set AGODA_SESSION_COOKIE to link personal account & auto-detect VIP tier",
+            "[bold yellow]Unset / Not Configured[/bold yellow]",
+            "Session cookie is unset: log into Agoda and run ./scripts/login_agoda.sh (Option 3) to auto-detect VIP tier",
         )
         if config.prompt_personal_account_setup:
             cookie_feedback_type = "unavailable"
