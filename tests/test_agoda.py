@@ -286,6 +286,21 @@ def test_build_agoda_hotel_url():
     assert "city=2758" in url4
     assert "text=Hanoi+Old+Quarter+Hotel" in url4
 
+    # 5. Mandatory query parameters for travel dates, guests, and rooms
+    url5 = build_agoda_hotel_url(
+        name="Vanda Hotel Da Nang",
+        canonical_url="https://www.agoda.com/vanda-hotel/hotel/da-nang-vn.html",
+        check_in="2027-02-04",
+        check_out="2027-02-05",
+        guests=2,
+        rooms=1,
+    )
+    assert "https://www.agoda.com/vanda-hotel/hotel/da-nang-vn.html?" in url5
+    assert "checkIn=2027-02-04" in url5
+    assert "checkOut=2027-02-05" in url5
+    assert "adults=2" in url5
+    assert "rooms=1" in url5
+
 
 def test_apply_vip_discount():
     # Platinum: 25% off

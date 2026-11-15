@@ -354,6 +354,21 @@ def test_build_booking_hotel_url():
     assert "https://www.booking.com/hotel/vn/peridot-grand-luxury-boutique-hotel.html" in url_canonical
     assert "nflt=fc%3D2" in url_canonical
 
+    # Mandatory query parameters for canonical URL
+    url_mandatory = build_booking_hotel_url(
+        name="Vanda Hotel Da Nang",
+        canonical_url="https://www.booking.com/hotel/vn/vanda.html",
+        check_in="2027-02-04",
+        check_out="2027-02-05",
+        guests=2,
+        rooms=1,
+    )
+    assert "https://www.booking.com/hotel/vn/vanda.html?" in url_mandatory
+    assert "checkin=2027-02-04" in url_mandatory
+    assert "checkout=2027-02-05" in url_mandatory
+    assert "group_adults=2" in url_mandatory
+    assert "no_rooms=1" in url_mandatory
+
 
 def test_verify_booking_session_valid():
     mock_resp = MagicMock()
