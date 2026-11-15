@@ -311,7 +311,7 @@ def parse_booking_jwt(token_str: Optional[str]) -> Optional[Dict[str, Any]]:
 
 def detect_genius_tier(
     session_cookie: Optional[str],
-    timeout: float = 4.0,
+    timeout: float = 8.0,
     client: Optional[httpx.Client] = None,
 ) -> Tuple[Optional[int], Optional[str], Optional[str]]:
     """
@@ -382,17 +382,20 @@ def detect_genius_tier(
                     html = r.text
                     if tier_level is None:
                         m_g = re.search(
-                            r'(?:data-genius-level=["\'](\d)["\']|"genius_level":\s*(\d)|Genius [Ll]evel\s*(\d))',
+                            r'(?:data-genius-level=["\'](\d)["\']|"genius_level":\s*(\d)|Genius [Ll]evel\s*(\d)|"level":\s*(\d)|"label":\s*"Genius Level (\d)")',
                             html,
                         )
                         if m_g:
-                            v_str = m_g.group(1) or m_g.group(2) or m_g.group(3)
+                            v_str = m_g.group(1) or m_g.group(2) or m_g.group(3) or m_g.group(4) or m_g.group(5)
                             if v_str and int(v_str) in GENIUS_DISCOUNT_RATES:
                                 tier_level = int(v_str)
                     if account_id is None:
-                        m_u = re.search(r'data-testid=["\']header-user-avatar["\'][^>]*title=["\']([^"\']+)["\']', html)
+                        m_u = re.search(
+                            r'(?:data-testid=["\']header-user-avatar["\'][^>]*title=["\']([^"\']+)["\']|data-testid=["\']header-profile["\'][^>]*title=["\']([^"\']+)["\']|title=["\']([^"\']+)["\'][^>]*data-testid=["\']header-profile["\'])',
+                            html,
+                        )
                         if m_u:
-                            account_id = m_u.group(1).strip()
+                            account_id = (m_u.group(1) or m_u.group(2) or m_u.group(3)).strip()
             except Exception:
                 pass
 
@@ -431,7 +434,9 @@ class BookingConfig:
             self.session_cookie = self._resolve_session_cookie()
 
         # Resolve Genius level & Account auto-detection
-        resolved_genius = genius_level if genius_level is not _UNSET else DEFAULT_GENIUS_LEVEL
+        resolved_genius = (
+            genius_level if (genius_level is not None and genius_level is not _UNSET) else DEFAULT_GENIUS_LEVEL
+        )
         auto_genius = (
             personal_account
             or str(resolved_genius).lower() in ("auto", "personal")
@@ -461,11 +466,7 @@ class BookingConfig:
                 self.genius_level = 0
 
     def _resolve_session_cookie(self) -> Optional[str]:
-        for var in ["BOOKING_SESSION_COOKIE", "BOOKING_COM_COOKIES", "BOOKING_COOKIE"]:
-            val = os.getenv(var)
-            if val and val.strip():
-                return val.strip()
-
+        # 1. Check persistent credentials config file first (written by login_booking.sh)
         cfg_path = Path.home() / ".config" / "booking" / "credentials.json"
         if cfg_path.is_file():
             try:
@@ -476,6 +477,13 @@ class BookingConfig:
             except Exception:
                 pass
 
+        # 2. Check process environment variables
+        for var in ["BOOKING_SESSION_COOKIE", "BOOKING_COM_COOKIES", "BOOKING_COOKIE"]:
+            val = os.getenv(var)
+            if val and val.strip():
+                return val.strip()
+
+        # 3. Fallback to workspace .env file
         env_path = Path("/workspace/.env")
         if env_path.is_file():
             try:
@@ -745,14 +753,17 @@ def print_pretty_table(
     check_out: str,
     guests: int,
     provider_name: str,
-    genius_level: int = DEFAULT_GENIUS_LEVEL,
+    genius_level: Any = DEFAULT_GENIUS_LEVEL,
 ) -> None:
     genius_tag = ""
-    if genius_level > 0:
-        disc_pct = int(GENIUS_DISCOUNT_RATES.get(genius_level, 0.20) * 100)
-        genius_tag = (
-            f"\n[bold cyan]✨ Genius Level {genius_level} Active (-{disc_pct}% loyalty discount applied)[/bold cyan]"
-        )
+    try:
+        g_lvl = int(genius_level)
+    except (ValueError, TypeError):
+        g_lvl = 0
+
+    if g_lvl > 0:
+        disc_pct = int(GENIUS_DISCOUNT_RATES.get(g_lvl, 0.20) * 100)
+        genius_tag = f"\n[bold cyan]✨ Genius Level {g_lvl} Active (-{disc_pct}% loyalty discount applied)[/bold cyan]"
 
     table = Table(
         title=f"🏨 Booking.com Hotels in {location} ({check_in} → {check_out}, {guests} guests){genius_tag}\n[dim]Source: {provider_name}[/dim]",
@@ -1106,7 +1117,7 @@ def main() -> None:
                 rooms=args.rooms,
                 currency=args.currency,
                 limit=args.limit,
-                genius_level=args.genius,
+                genius_level=config.genius_level,
                 config=config,
             )
         except Exception as e:
@@ -1142,7 +1153,7 @@ def main() -> None:
                 check_out=check_out,
                 guests=args.guests,
                 provider_name=provider_used,
-                genius_level=args.genius,
+                genius_level=config.genius_level,
             )
 
         # If user passed --add-to-trip, allow choosing a property
