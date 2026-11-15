@@ -320,7 +320,7 @@ def test_handle_booking_search_command_construction():
 
 
 def test_handle_compare_hotels_command_construction():
-    """Verify handle_compare_hotels executes both Booking.com and Agoda and builds a comparative table."""
+    """Verify handle_compare_hotels executes Booking.com, Agoda, and Hotel Direct and builds a comparative table."""
     import json
     from unittest.mock import AsyncMock, MagicMock
 
@@ -361,14 +361,30 @@ def test_handle_compare_hotels_command_construction():
         }
     ).encode()
 
+    mock_google_json = json.dumps(
+        {
+            "success": True,
+            "data": [
+                {
+                    "name": "Booking Grand Hotel",
+                    "pricePerNight": "230",
+                    "currency": "EUR",
+                    "bookerType": "google",
+                }
+            ],
+        }
+    ).encode()
+
     async def fake_subprocess_exec(*cmd, **kwargs):
         captured_cmds.append(list(cmd))
         mock_proc = AsyncMock()
         mock_proc.returncode = 0
-        if "booking.py" in cmd[2]:
+        if any("booking.py" in str(arg) for arg in cmd):
             mock_proc.communicate = AsyncMock(return_value=(mock_booking_json, b""))
-        else:
+        elif any("agoda.py" in str(arg) for arg in cmd):
             mock_proc.communicate = AsyncMock(return_value=(mock_agoda_json, b""))
+        else:
+            mock_proc.communicate = AsyncMock(return_value=(mock_google_json, b""))
         return mock_proc
 
     mock_step = MagicMock()
@@ -382,19 +398,21 @@ def test_handle_compare_hotels_command_construction():
         with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
             res = asyncio.run(handle_compare_hotels("Tokyo 2026-12-01 2026-12-05"))
 
-    assert len(captured_cmds) == 2
-    # Verify both commands were executed
-    executed_scripts = [cmd[2] for cmd in captured_cmds]
-    assert any("booking.py" in s for s in executed_scripts)
-    assert any("agoda.py" in s for s in executed_scripts)
+    # Verify Booking.com and Agoda were queried
+    assert any("booking.py" in str(cmd) for cmd in captured_cmds)
+    assert any("agoda.py" in str(cmd) for cmd in captured_cmds)
 
-    # Verify comparative table output
+    # Verify comparative table output includes all 3 options
     assert "Hotel Comparison: Booking.com vs. Agoda" in res
+    assert "Hotel Direct" in res
     assert "Booking Grand Hotel" in res
     assert "Agoda River Resort" in res
     assert "Booking.com" in res
     assert "Agoda" in res
     assert "EUR 165.00" in res
+    assert "Book Direct" in res
+    assert "google.com/travel/hotels" in res
+    assert "EUR 230/night" in res
 
 
 def test_format_cookie_error_banner_booking_expired():
