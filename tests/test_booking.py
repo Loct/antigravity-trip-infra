@@ -61,6 +61,9 @@ def test_hotel_dataclass():
 
 
 def test_booking_config_resolution(monkeypatch, tmp_path):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
     monkeypatch.setenv("BOOKING_SESSION_COOKIE", "bkng_sso_session=abc123xyz")
 
     cfg = BookingConfig()
