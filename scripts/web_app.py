@@ -31,6 +31,7 @@ import re
 import shutil
 import sqlite3
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -531,8 +532,16 @@ async def handle_agoda_search(args: str) -> str:
             return f"⚠️ Error executing Agoda search: {e}"
 
 
+def normalize_hotel_name(name: str, city: str = "") -> str:
+    """Normalize hotel name for fuzzy cross-platform deduplication and matching."""
+    cleaned = re.sub(r"[^\w\s]", "", name.lower())
+    stop_words = {"hotel", "resort", "the", "and", "suites", "apart", "tokyo", "japan", city.lower()}
+    tokens = [w for w in cleaned.split() if w not in stop_words]
+    return " ".join(tokens) if tokens else cleaned
+
+
 async def handle_compare_hotels(args: str) -> str:
-    """Execute parallel Booking.com and Agoda search and synthesize a comparative overview."""
+    """Execute parallel Booking.com, Agoda, and Hotel Direct search and synthesize a comparative overview."""
     parts = args.strip().split()
     if not parts:
         return "⚠️ **Usage**: `/hotels <city> [checkin] [checkout]` (e.g. `/hotels Tokyo 2026-04-01 2026-04-05`)"
@@ -552,8 +561,17 @@ async def handle_compare_hotels(args: str) -> str:
         bkng_cmd.extend(["-o", checkout])
         agoda_cmd.extend(["-o", checkout])
 
-    async with cl.Step(name=f"Comparing Booking.com & Agoda for {city}", type="tool") as step:
-        step.output = "Searching Booking.com & Agoda simultaneously..."
+    # Google Hotels / Wanderlog lodging command for direct rate lookup if available
+    google_cmd = None
+    if shutil.which("wanderlog"):
+        google_cmd = ["wanderlog", "travel", "hotels", city, "-o", "json"]
+        if checkin:
+            google_cmd.extend(["--check-in", checkin])
+        if checkout:
+            google_cmd.extend(["--check-out", checkout])
+
+    async with cl.Step(name=f"Comparing Booking.com, Agoda & Hotel Direct for {city}", type="tool") as step:
+        step.output = "Searching Booking.com, Agoda & Hotel Direct simultaneously..."
 
         async def run_cmd(cmd: List[str]) -> Tuple[int, str, str]:
             try:
@@ -572,12 +590,16 @@ async def handle_compare_hotels(args: str) -> str:
             except Exception as e:
                 return -1, "", str(e)
 
-        (code_b, out_b, err_b), (code_a, out_a, err_a) = await asyncio.gather(
-            run_cmd(bkng_cmd),
-            run_cmd(agoda_cmd),
-        )
+        tasks = [run_cmd(bkng_cmd), run_cmd(agoda_cmd)]
+        if google_cmd:
+            tasks.append(run_cmd(google_cmd))
 
-        step.output = "Search complete, synthesizing comparison table..."
+        results = await asyncio.gather(*tasks)
+        code_b, out_b, err_b = results[0]
+        code_a, out_a, err_a = results[1]
+        code_g, out_g, err_g = results[2] if len(results) > 2 else (-1, "", "Not available")
+
+        step.output = "Search complete, synthesizing property-matched comparison table..."
 
         # Parse JSON
         hotels_b = []
@@ -595,6 +617,24 @@ async def handle_compare_hotels(args: str) -> str:
                 hotels_a = data_a.get("hotels", [])
             except Exception:
                 pass
+
+        hotels_g = []
+        if code_g == 0 and out_g:
+            try:
+                data_g = json.loads(out_g)
+                if isinstance(data_g, dict):
+                    hotels_g = data_g.get("data", []) or data_g.get("hotels", [])
+                elif isinstance(data_g, list):
+                    hotels_g = data_g
+            except Exception:
+                pass
+
+        # Build Google / Direct rate lookup by normalized name
+        google_lookup: Dict[str, Dict[str, Any]] = {}
+        for h in hotels_g:
+            g_name = h.get("name", "")
+            if g_name:
+                google_lookup[normalize_hotel_name(g_name, city)] = h
 
         # Check for cookie warnings/errors on either provider
         banner_b = format_cookie_error_banner("Booking.com", err_b or out_b)
@@ -620,50 +660,136 @@ async def handle_compare_hotels(args: str) -> str:
 
         lines.extend(
             [
-                f"### 🏨 Hotel Comparison: Booking.com vs. Agoda for '{city}'",
+                f"### 🏨 Hotel Comparison: Booking.com vs. Agoda vs. Hotel Direct for '{city}'",
                 "",
-                "| # | Property Name | Provider | Rate / Deal | Rating | Perks / Badges | Direct Link |",
-                "|---|---|---|---|:---:|---|---|",
+                "| # | Property Name | Rating | Booking.com | Agoda | Hotel Direct | Perks / Badges |",
+                "|---|---|:---:|---|---|---|---|",
             ]
         )
 
-        row_idx = 1
-        for h in hotels_b[:5]:
-            name = h.get("name", "Unknown")
-            rate = (
-                h.get("genius_price_text")
-                or h.get("price_text")
-                or (f"{h.get('currency')} {h.get('total_price'):.2f}" if h.get("total_price") else "Check rate")
-            )
-            if h.get("is_genius_deal"):
-                rate += f" *(Genius -{int(h.get('genius_discount_rate', 0.2) * 100)}%)*"
-            score = f"{h.get('rating'):.1f}/10" if h.get("rating") else "N/A"
-            badges = ", ".join(h.get("badges", [])) or "—"
-            url = h.get("url", "#")
-            link_md = f"[Book Booking.com]({url})" if url != "#" else "—"
-            lines.append(f"| {row_idx} | **{name}** | Booking.com | {rate} | {score} | {badges} | {link_md} |")
-            row_idx += 1
+        # Property-matched deduplication across Booking and Agoda
+        matched_properties: List[Dict[str, Any]] = []
+        used_agoda_idx = set()
 
-        for h in hotels_a[:5]:
-            name = h.get("name", "Unknown")
-            rate = (
-                h.get("vip_price_text")
-                or h.get("price_text")
-                or (f"{h.get('currency')} {h.get('total_price'):.2f}" if h.get("total_price") else "Check rate")
+        for h_b in hotels_b[:5]:
+            name_b = h_b.get("name", "Unknown")
+            norm_b = normalize_hotel_name(name_b, city)
+            matched_a = None
+            for idx, h_a in enumerate(hotels_a[:5]):
+                if idx in used_agoda_idx:
+                    continue
+                norm_a = normalize_hotel_name(h_a.get("name", ""), city)
+                if norm_b and norm_a and (norm_b == norm_a or norm_b in norm_a or norm_a in norm_b):
+                    matched_a = h_a
+                    used_agoda_idx.add(idx)
+                    break
+
+            badges = list(dict.fromkeys(h_b.get("badges", []) + (matched_a.get("badges", []) if matched_a else [])))
+            matched_properties.append(
+                {
+                    "name": name_b,
+                    "booking": h_b,
+                    "agoda": matched_a,
+                    "rating": h_b.get("rating") or (matched_a.get("rating") if matched_a else None),
+                    "badges": badges,
+                }
             )
-            if h.get("is_vip_deal"):
-                rate += f" *(VIP -{int(h.get('vip_discount_rate', 0.25) * 100)}%)*"
-            score = f"{h.get('rating'):.1f}/10" if h.get("rating") else "N/A"
-            badges = ", ".join(h.get("badges", [])) or "—"
-            url = h.get("url", "#")
-            link_md = f"[Book Agoda]({url})" if url != "#" else "—"
-            lines.append(f"| {row_idx} | **{name}** | Agoda | {rate} | {score} | {badges} | {link_md} |")
+
+        for idx, h_a in enumerate(hotels_a[:5]):
+            if idx not in used_agoda_idx:
+                matched_properties.append(
+                    {
+                        "name": h_a.get("name", "Unknown"),
+                        "booking": None,
+                        "agoda": h_a,
+                        "rating": h_a.get("rating"),
+                        "badges": h_a.get("badges", []),
+                    }
+                )
+
+        row_idx = 1
+        for prop in matched_properties:
+            name = prop["name"]
+            score = f"{prop['rating']:.1f}/10" if prop.get("rating") else "N/A"
+            badges = ", ".join(prop["badges"][:2]) or "—"
+
+            # 1. Booking.com cell
+            hb = prop["booking"]
+            if hb:
+                rate_b = (
+                    hb.get("genius_price_text")
+                    or hb.get("price_text")
+                    or (f"{hb.get('currency')} {hb.get('total_price'):.2f}" if hb.get("total_price") else "Check rate")
+                )
+                if hb.get("is_genius_deal"):
+                    rate_b += f" *(Genius -{int(hb.get('genius_discount_rate', 0.2) * 100)}%)*"
+                url_b = hb.get("url") or "#"
+                link_b = f"[Book Booking.com]({url_b})" if url_b != "#" else "—"
+                cell_b = f"{rate_b}<br>{link_b}"
+            else:
+                bk_params = f"ss={urllib.parse.quote_plus(name)}"
+                if checkin:
+                    bk_params += f"&checkin={checkin}"
+                if checkout:
+                    bk_params += f"&checkout={checkout}"
+                bk_params += "&group_adults=1&no_rooms=1"
+                cell_b = (
+                    f"*(Check rate)*<br>[Search Booking.com](https://www.booking.com/searchresults.html?{bk_params})"
+                )
+
+            # 2. Agoda cell
+            ha = prop["agoda"]
+            if ha:
+                rate_a = (
+                    ha.get("vip_price_text")
+                    or ha.get("price_text")
+                    or (f"{ha.get('currency')} {ha.get('total_price'):.2f}" if ha.get("total_price") else "Check rate")
+                )
+                if ha.get("is_vip_deal"):
+                    rate_a += f" *(VIP -{int(ha.get('vip_discount_rate', 0.25) * 100)}%)*"
+                url_a = ha.get("url") or "#"
+                link_a = f"[Book Agoda]({url_a})" if url_a != "#" else "—"
+                cell_a = f"{rate_a}<br>{link_a}"
+            else:
+                ag_params = f"text={urllib.parse.quote_plus(name)}"
+                if checkin:
+                    ag_params += f"&checkIn={checkin}"
+                if checkout:
+                    ag_params += f"&checkOut={checkout}"
+                ag_params += "&adults=1&rooms=1"
+                cell_a = f"*(Check rate)*<br>[Search Agoda](https://www.agoda.com/search?{ag_params})"
+
+            # 3. Hotel Direct cell
+            norm = normalize_hotel_name(name, city)
+            direct_hotel = None
+            for k, v in google_lookup.items():
+                if norm and k and (norm == k or norm in k or k in norm):
+                    direct_hotel = v
+                    break
+
+            q_direct = urllib.parse.quote_plus(f"{name} {city}")
+            direct_params = f"q={q_direct}"
+            if checkin:
+                direct_params += f"&checkin={checkin}"
+            if checkout:
+                direct_params += f"&checkout={checkout}"
+            direct_params += "&adults=1"
+            direct_url = f"https://www.google.com/travel/hotels?{direct_params}"
+
+            if direct_hotel and direct_hotel.get("pricePerNight"):
+                curr = direct_hotel.get("currency", "EUR")
+                ppn = direct_hotel.get("pricePerNight")
+                cell_d = f"**{curr} {ppn}/night** *(Official)*<br>[Book Direct]({direct_url})"
+            else:
+                cell_d = f"Check Official Site<br>[Book Direct]({direct_url})"
+
+            lines.append(f"| {row_idx} | **{name}** | {score} | {cell_b} | {cell_a} | {cell_d} | {badges} |")
             row_idx += 1
 
         lines.extend(
             [
                 "",
-                "💡 *Tip: Loyalty discounts (Genius Level 3 on Booking.com & AgodaVIP Platinum on Agoda) are pre-calculated.*",
+                "💡 *Tip: Loyalty discounts (Genius on Booking.com & AgodaVIP on Agoda) are pre-calculated. Hotel Direct options link directly to Google Hotels / Official Hotel reservation engines with pre-populated travel dates.*",
             ]
         )
 
@@ -838,7 +964,7 @@ if cl is not None:
                 help_md = """### 📖 Available Slash Commands
 
 - `/trips` - List current Wanderlog trips
-- `/hotels <city> [checkin] [checkout]` - Compare Booking.com & Agoda side-by-side
+- `/hotels <city> [checkin] [checkout]` - 3-way lodging comparison (Booking.com, Agoda & Hotel Direct)
 - `/hotel <city> [checkin] [checkout]` - Search Booking.com (with Genius Lv3 discounts)
 - `/agoda <city> [checkin] [checkout]` - Search Agoda lodging (with AgodaVIP discounts)
 - `/council <question>` - Ask the Claude & DeepSeek AI Travel Council
