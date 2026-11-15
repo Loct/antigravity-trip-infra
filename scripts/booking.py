@@ -98,6 +98,7 @@ def build_booking_hotel_url(
     check_out: Optional[str] = None,
     guests: int = 2,
     rooms: int = 1,
+    free_cancellation: bool = False,
 ) -> str:
     """Build a valid Booking.com property URL or deep search link."""
     params: Dict[str, str] = {}
@@ -109,9 +110,15 @@ def build_booking_hotel_url(
 
     if canonical_url and "booking.com" in canonical_url:
         base = canonical_url.split("?")[0]
+    elif country_code:
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+        base = f"https://www.booking.com/hotel/{country_code.lower()}/{slug}.html"
     else:
         base = "https://www.booking.com/searchresults.html"
         params["ss"] = name
+
+    if free_cancellation:
+        params["nflt"] = "fc=2"
 
     if params:
         return f"{base}?{urllib.parse.urlencode(params)}"
