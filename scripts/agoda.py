@@ -96,6 +96,32 @@ class Hotel:
         return dataclasses.asdict(self)
 
 
+KNOWN_AGODA_CITIES: Dict[str, str] = {
+    "hanoi": "2758",
+    "ha noi": "2758",
+    "ho chi minh": "13170",
+    "ho chi minh city": "13170",
+    "saigon": "13170",
+    "da nang": "16440",
+    "danang": "16440",
+    "hoi an": "16264",
+    "hue": "17190",
+    "ninh binh": "18018",
+    "ha long": "17188",
+    "halong": "17188",
+    "tokyo": "5085",
+    "osaka": "14502",
+    "kyoto": "1784",
+    "bangkok": "9395",
+    "singapore": "4064",
+    "seoul": "16901",
+    "paris": "1574",
+    "london": "2317",
+    "rome": "10620",
+    "amsterdam": "1291",
+}
+
+
 def build_agoda_hotel_url(
     name: str,
     canonical_url: Optional[str] = None,
@@ -104,6 +130,8 @@ def build_agoda_hotel_url(
     check_out: Optional[str] = None,
     guests: int = 2,
     rooms: int = 1,
+    city_id: Optional[str] = None,
+    location: Optional[str] = None,
 ) -> str:
     """Build a valid Agoda property URL or deep search link with populated travel dates and guests."""
     params: Dict[str, str] = {}
@@ -120,9 +148,28 @@ def build_agoda_hotel_url(
         base = "https://www.agoda.com/search"
         params["hotel"] = str(hotel_id)
         params["text"] = name
+        resolved_city = city_id or (KNOWN_AGODA_CITIES.get(str(location).lower().strip()) if location else None)
+        if resolved_city:
+            params["city"] = str(resolved_city)
     else:
         base = "https://www.agoda.com/search"
         params["text"] = name
+        # Resolve city to ensure Agoda /search endpoint does not 301 redirect to homepage
+        resolved_city = city_id
+        if not resolved_city and location:
+            loc_key = str(location).lower().strip()
+            for k, cid in KNOWN_AGODA_CITIES.items():
+                if k in loc_key:
+                    resolved_city = cid
+                    break
+        if not resolved_city:
+            name_key = name.lower()
+            for k, cid in KNOWN_AGODA_CITIES.items():
+                if k in name_key:
+                    resolved_city = cid
+                    break
+        if resolved_city:
+            params["city"] = str(resolved_city)
 
     if params:
         return f"{base}?{urllib.parse.urlencode(params)}"
@@ -1101,6 +1148,8 @@ def search_scrape(
                         check_out=check_out,
                         guests=guests,
                         rooms=rooms,
+                        city_id=str(city_id) if city_id else None,
+                        location=location,
                     )
 
                     badges = []
@@ -1184,6 +1233,8 @@ def search_scrape(
                 check_out=check_out,
                 guests=guests,
                 rooms=rooms,
+                city_id=str(city_id) if city_id else None,
+                location=location,
             )
 
             hotels.append(

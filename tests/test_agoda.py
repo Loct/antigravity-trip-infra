@@ -277,6 +277,15 @@ def test_build_agoda_hotel_url():
     assert "hotel-gracery-shinjuku/hotel/tokyo-jp.html" in url3
     assert "checkIn=2026-12-01" in url3
 
+    # 4. Auto-detects known city (e.g. Hanoi) and attaches city parameter to prevent 301 redirect
+    url4 = build_agoda_hotel_url(
+        name="Hanoi Old Quarter Hotel",
+        check_in="2027-01-22",
+        check_out="2027-01-26",
+    )
+    assert "city=2758" in url4
+    assert "text=Hanoi+Old+Quarter+Hotel" in url4
+
 
 def test_apply_vip_discount():
     # Platinum: 25% off

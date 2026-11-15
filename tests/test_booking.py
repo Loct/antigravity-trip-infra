@@ -343,6 +343,17 @@ def test_build_booking_hotel_url():
     assert "ss=Tam+Coc+Victoria+Hotel" in url_fallback
     assert "checkin=2027-01-27" in url
 
+    # Country code canonical slug building & free cancellation filter
+    url_canonical = build_booking_hotel_url(
+        name="Peridot Grand Luxury Boutique Hotel",
+        country_code="vn",
+        check_in="2027-01-22",
+        check_out="2027-01-26",
+        free_cancellation=True,
+    )
+    assert "https://www.booking.com/hotel/vn/peridot-grand-luxury-boutique-hotel.html" in url_canonical
+    assert "nflt=fc%3D2" in url_canonical
+
 
 def test_verify_booking_session_valid():
     mock_resp = MagicMock()
