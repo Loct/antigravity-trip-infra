@@ -80,11 +80,11 @@ Search outputs include canonical direct URLs for each property:
 
 ---
 
-## 4. Mandatory Dual-OTA Comparison (Booking.com & Agoda)
+## 4. Mandatory 3-Way Lodging Comparison (Booking.com, Agoda & Hotel Direct)
 
 > [!IMPORTANT]
-> **Always Search Both Platforms**:
-> When the user asks for hotels or accommodation options in any destination, Antigravity **MUST ALWAYS** query both Booking.com and Agoda in parallel (`-f json`), then present a unified comparative overview table comparing rates (Genius vs. AgodaVIP), ratings, badges, and verified links.
+> **Always Search Both Platforms & Hotel Direct**:
+> When the user asks for hotels or accommodation options in any destination, Antigravity **MUST ALWAYS** query both Booking.com and Agoda in parallel (`-f json`), look up verified Hotel Direct rates and official booking engine links via Google Hotels / Search meta-aggregation, then present a unified property-matched comparative overview table comparing rates (Genius vs. AgodaVIP vs. Hotel Direct), ratings, badges, and verified links.
 
 1. Query Booking.com:
    ```bash
@@ -94,7 +94,11 @@ Search outputs include canonical direct URLs for each property:
    ```bash
    uv run scripts/agoda.py search -l "<city>" -i <in> -o <out> -f json
    ```
-3. Synthesize side-by-side in a comparative overview table that always displays both the price per night in euros (€/night) and total price in euros (€ total) with loyalty discounts applied strictly based on the credentials/account associated with the session cookie (auto-detecting Genius and AgodaVIP tiers rather than assuming static levels), ratings, amenities, and direct booking links.
+3. Retrieve Hotel Direct:
+   - Check Google Hotels / Search meta-aggregation for candidate properties to fetch verified "Official Site" direct rates and official reservation URLs.
+   - When direct pricing is available, display exact live €/night and total stay price with direct reservation URL.
+   - When direct pricing is unindexed or dynamic form checkout is required, display "Direct rate unlisted / Check official site" with the verified direct official website URL.
+4. Synthesize side-by-side in a property-matched comparative overview table that compares Booking.com vs. Agoda vs. Hotel Direct side-by-side for each property, always displaying both the price per night in euros (€/night) and total price in euros (€ total), auto-detected loyalty tiers (Genius / AgodaVIP), key amenities, and pre-populated direct booking links.
 
 ---
 
