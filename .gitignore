@@ -16,3 +16,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .chainlit/translations/
+
+# Next.js frontend build & dependencies
+frontend/node_modules/
+frontend/.next/
+frontend/tsconfig.tsbuildinfo
+frontend/next-env.d.ts

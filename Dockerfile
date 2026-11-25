@@ -60,6 +60,12 @@ RUN uv python install 3.12 && \
 COPY --from=wanderlog-builder /wanderlog /usr/local/bin/wanderlog
 RUN chmod +x /usr/local/bin/wanderlog
 
+# Install Node.js 22 LTS for the Next.js Travel Planner frontend
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
 # Setup directories and permissions
 ENV HOME=/root
 ENV WORKSPACE_DIR=/workspace
@@ -72,8 +78,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Environment variables
 ENV PATH="/usr/local/bin:/root/.local/bin:${PATH}"
 
-# Expose Web UI port
-EXPOSE 8000
+# Expose Web UI (Chainlit) and Travel App (Next.js) ports
+EXPOSE 8000 3000
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["daemon"]

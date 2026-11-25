@@ -321,11 +321,40 @@ if [ "$ENABLE_WEB_UI" = "true" ]; then
   fi
 fi
 
+# 7b. Start Travel Planner Frontend (Next.js)
+ENABLE_TRAVEL_APP="${ENABLE_TRAVEL_APP:-true}"
+FRONTEND_PORT="${FRONTEND_PORT:-3000}"
+
+if [ "$ENABLE_TRAVEL_APP" = "true" ] && [ -f "/workspace/frontend/package.json" ] && command -v npm >/dev/null 2>&1; then
+  echo "[-] Starting Travel Planner Frontend (Next.js) on port ${FRONTEND_PORT}..."
+  cd /workspace/frontend
+  if [ ! -d "node_modules" ]; then
+    echo "[-] Installing frontend dependencies..."
+    npm install --no-audit --no-fund >/root/.gemini/antigravity-cli/travel-app-build.log 2>&1 || true
+  fi
+  if [ ! -d ".next" ]; then
+    echo "[-] Building Next.js Travel Planner frontend..."
+    npm run build >>/root/.gemini/antigravity-cli/travel-app-build.log 2>&1 || true
+  fi
+  npx next start -H 0.0.0.0 -p "${FRONTEND_PORT}" >/root/.gemini/antigravity-cli/travel-app.log 2>&1 &
+  TRAVEL_PID=$!
+  sleep 2
+  if kill -0 "$TRAVEL_PID" 2>/dev/null; then
+    echo "[-] Travel Planner Frontend is RUNNING (PID: $TRAVEL_PID) on port ${FRONTEND_PORT}."
+    echo "    Open http://localhost:${FRONTEND_PORT} in your browser."
+  else
+    echo "[!] Travel Planner Frontend failed to start. Check logs:"
+    cat /root/.gemini/antigravity-cli/travel-app.log 2>/dev/null || true
+  fi
+  cd /workspace
+fi
+
 # 8. Execute Command
 if [ "$1" = "daemon" ] || [ -z "$1" ]; then
   echo "[-] Container ready. Running in daemon mode."
   echo "    Useful commands:"
   echo "      - Web Frontend:     http://localhost:${WEB_PORT:-8000}"
+  echo "      - Travel App:       http://localhost:${FRONTEND_PORT:-3000}"
   echo "      - Interactive CLI:  docker compose exec antigravity-wanderlog agy"
   echo "      - Wanderlog status: docker compose exec antigravity-wanderlog wanderlog status"
   echo "      - Wanderlog trips:  docker compose exec antigravity-wanderlog wanderlog trips list"
