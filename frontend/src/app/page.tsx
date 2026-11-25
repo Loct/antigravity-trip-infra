@@ -5,6 +5,7 @@ import { Loader2, Plane, Send, Sparkles, Wrench } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { CouncilCard } from "@/components/CouncilCard";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { HotelComparisonCard } from "@/components/HotelComparisonCard";
 import { TripSummary, TripWorkspace } from "@/components/TripWorkspace";
 
@@ -128,19 +129,21 @@ export default function TravelPlannerPage() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-[#090d16] text-slate-100">
-      <TripWorkspace
-        trips={trips}
-        selectedTripId={selectedTripId}
-        onSelectTrip={setSelectedTripId}
-        tripDetail={tripDetail}
-        loadingTrips={loadingTrips}
-        loadingDetail={loadingDetail}
-        onRefresh={() => {
-          loadTrips();
-          if (selectedTripId) loadTripDetail(selectedTripId);
-        }}
-        onQuickPrompt={(prompt) => append({ role: "user", content: prompt })}
-      />
+      <ErrorBoundary scope="Wanderlog Workspace">
+        <TripWorkspace
+          trips={trips}
+          selectedTripId={selectedTripId}
+          onSelectTrip={setSelectedTripId}
+          tripDetail={tripDetail}
+          loadingTrips={loadingTrips}
+          loadingDetail={loadingDetail}
+          onRefresh={() => {
+            loadTrips();
+            if (selectedTripId) loadTripDetail(selectedTripId);
+          }}
+          onQuickPrompt={(prompt) => append({ role: "user", content: prompt })}
+        />
+      </ErrorBoundary>
 
       <main className="flex-1 flex flex-col h-[58vh] lg:h-screen">
         <header className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
@@ -189,7 +192,8 @@ export default function TravelPlannerPage() {
           )}
 
           {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <ErrorBoundary key={m.id} scope="Chat Message">
+              <div className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
                 className={`max-w-3xl w-full ${
                   m.role === "user"
@@ -259,6 +263,7 @@ export default function TravelPlannerPage() {
                 })}
               </div>
             </div>
+            </ErrorBoundary>
           ))}
 
           {error && (
