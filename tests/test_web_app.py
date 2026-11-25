@@ -69,7 +69,7 @@ def test_handle_status_configured():
         "OPENROUTER_API_KEY": "sk-or-test",
         "GH_TOKEN": "ghp_test",
     }
-    with patch.dict(os.environ, mock_env):
+    with patch.dict(os.environ, mock_env, clear=True):
         status = asyncio.run(handle_status())
         assert "✅ **Wanderlog**: Authenticated" in status
         assert "✅ **Booking.com**: Authenticated" in status
@@ -85,7 +85,7 @@ def test_handle_status_agoda_personal_account_detected():
     mock_env = {
         "AGODA_SESSION_COOKIE": "agoda.vip.tier=3; user_email=alex%40example.com",
     }
-    with patch.dict(os.environ, mock_env):
+    with patch.dict(os.environ, mock_env, clear=True):
         status = asyncio.run(handle_status())
         assert "Personal account connected" in status
         assert "VIP Gold auto-detected" in status
