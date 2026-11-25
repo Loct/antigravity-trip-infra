@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Compass, Hotel, MapPin, RefreshCw } from "lucide-react";
+import { Calendar, Compass, ExternalLink, Hotel, MapPin, RefreshCw } from "lucide-react";
 
 export interface TripSummary {
   id?: string;
@@ -25,7 +25,27 @@ function asString(val: unknown): string {
   return typeof val === "string" ? val.trim() : "";
 }
 
-function extractDays(detail: Record<string, unknown> | null): Array<{ title: string; items: string[] }> {
+interface DayItem {
+  label: string;
+  url?: string;
+}
+
+function buildPlaceUrl(place: Record<string, unknown> | undefined, label: string): string | undefined {
+  if (!place) return undefined;
+  const website = asString(place.website);
+  if (website && /^https?:\/\//i.test(website)) return website;
+  const placeId = asString(place.place_id);
+  const query = encodeURIComponent(label || asString(place.formatted_address));
+  if (placeId && query) {
+    return `https://www.google.com/maps/search/?api=1&query=${query}&query_place_id=${encodeURIComponent(placeId)}`;
+  }
+  if (query) {
+    return `https://www.google.com/maps/search/?api=1&query=${query}`;
+  }
+  return undefined;
+}
+
+function extractDays(detail: Record<string, unknown> | null): Array<{ title: string; items: DayItem[] }> {
   if (!detail) return [];
   const outer = detail.itinerary as Record<string, unknown> | undefined;
   const inner = (outer?.itinerary as Record<string, unknown> | undefined) || outer;
@@ -44,14 +64,19 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
       asString(sec.date) ||
       `Day ${idx + 1}`;
     const blocks = (sec.blocks as Array<Record<string, unknown>>) || (sec.places as Array<Record<string, unknown>>) || [];
-    const items = Array.isArray(blocks)
+    const items: DayItem[] = Array.isArray(blocks)
       ? blocks
-          .map((b) => {
-            const placeName = asString((b.place as Record<string, unknown> | undefined)?.name);
-            if (placeName) return placeName;
+          .map((b): DayItem | null => {
+            const place = b.place as Record<string, unknown> | undefined;
+            const placeName = asString(place?.name);
+            if (placeName) {
+              return { label: placeName, url: buildPlaceUrl(place, placeName) };
+            }
 
             const nameOrTitle = asString(b.name) || asString(b.title);
-            if (nameOrTitle) return nameOrTitle;
+            if (nameOrTitle) {
+              return { label: nameOrTitle, url: asString(b.url) || buildPlaceUrl(place, nameOrTitle) };
+            }
 
             const depart = b.depart as Record<string, unknown> | undefined;
             const arrive = b.arrive as Record<string, unknown> | undefined;
@@ -59,11 +84,11 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
               const endpoint = (ep?: Record<string, unknown>) => {
                 if (!ep) return "";
                 const airport = ep.airport as Record<string, unknown> | undefined;
-                const place = ep.place as Record<string, unknown> | undefined;
+                const epPlace = ep.place as Record<string, unknown> | undefined;
                 return (
                   asString(airport?.iata) ||
                   asString(airport?.cityName) ||
-                  asString(place?.name)
+                  asString(epPlace?.name)
                 );
               };
               const from = endpoint(depart);
@@ -74,12 +99,19 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
               const flightNum = asString(flight?.flightNumber);
               const prefix = flightNum ? `${flightNum}: ` : "";
               const suffix = date ? ` (${date})` : "";
-              if (route || flightNum) return `${prefix}${route || "Scheduled"}${suffix}`;
+              if (route || flightNum) {
+                const arrivePlace = arrive?.place as Record<string, unknown> | undefined;
+                return {
+                  label: `${prefix}${route || "Scheduled"}${suffix}`,
+                  url: buildPlaceUrl(arrivePlace, to || route),
+                };
+              }
             }
 
-            return asString(b.text);
+            const text = asString(b.text);
+            return text ? { label: text } : null;
           })
-          .filter(Boolean)
+          .filter((x): x is DayItem => x !== null)
       : [];
     return { title: heading, items };
   });
@@ -179,7 +211,21 @@ export function TripWorkspace({
               {day.items.length > 0 ? (
                 <ul className="space-y-1 pl-5 list-disc text-xs text-slate-400">
                   {day.items.map((item, j) => (
-                    <li key={j}>{item}</li>
+                    <li key={j}>
+                      {item.url ? (
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-sky-300/90 hover:text-sky-200 hover:underline"
+                        >
+                          <span>{item.label}</span>
+                          <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                        </a>
+                      ) : (
+                        <span>{item.label}</span>
+                      )}
+                    </li>
                   ))}
                 </ul>
               ) : (
