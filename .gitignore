@@ -6,7 +6,7 @@ credentials.json
 *.code-workspace
 
 # User trip outputs and local data
-trips/
+/trips/
 data/
 .data/
 *.log

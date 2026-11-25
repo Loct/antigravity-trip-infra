@@ -23,20 +23,38 @@ interface TripWorkspaceProps {
 
 function extractDays(detail: Record<string, unknown> | null): Array<{ title: string; items: string[] }> {
   if (!detail) return [];
-  const itinerary = detail.itinerary as Record<string, unknown> | undefined;
+  const outer = detail.itinerary as Record<string, unknown> | undefined;
+  const inner = (outer?.itinerary as Record<string, unknown> | undefined) || outer;
   const sections =
-    (itinerary?.sections as Array<Record<string, unknown>>) ||
-    (itinerary?.days as Array<Record<string, unknown>>) ||
+    (inner?.sections as Array<Record<string, unknown>>) ||
+    (inner?.days as Array<Record<string, unknown>>) ||
     ((detail.trip as Record<string, unknown>)?.sections as Array<Record<string, unknown>>) ||
     [];
 
   if (!Array.isArray(sections)) return [];
-  return sections.slice(0, 14).map((sec, idx) => {
-    const heading = (sec.heading as string) || (sec.title as string) || (sec.date as string) || `Day ${idx + 1}`;
+  return sections.slice(0, 30).map((sec, idx) => {
+    const heading =
+      (sec.displayHeading as string) ||
+      (sec.heading as string) ||
+      (sec.title as string) ||
+      (sec.date as string) ||
+      `Day ${idx + 1}`;
     const blocks = (sec.blocks as Array<Record<string, unknown>>) || (sec.places as Array<Record<string, unknown>>) || [];
     const items = Array.isArray(blocks)
       ? blocks
-          .map((b) => (b.name as string) || (b.title as string) || ((b.place as Record<string, unknown>)?.name as string) || "")
+          .map((b) => {
+            const placeName = (b.place as Record<string, unknown> | undefined)?.name as string | undefined;
+            const flight = b.flightInfo as Record<string, unknown> | undefined;
+            const flightLabel = flight?.flightNumber ? `Flight ${flight.flightNumber}` : "";
+            return (
+              placeName ||
+              (b.name as string) ||
+              (b.title as string) ||
+              flightLabel ||
+              (b.text as string) ||
+              ""
+            ).trim();
+          })
           .filter(Boolean)
       : [];
     return { title: heading, items };
