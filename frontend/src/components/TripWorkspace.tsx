@@ -48,15 +48,36 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
       ? blocks
           .map((b) => {
             const placeName = asString((b.place as Record<string, unknown> | undefined)?.name);
-            const flight = b.flightInfo as Record<string, unknown> | undefined;
-            const flightLabel = asString(flight?.flightNumber) ? `Flight ${asString(flight?.flightNumber)}` : "";
-            return (
-              placeName ||
-              asString(b.name) ||
-              asString(b.title) ||
-              flightLabel ||
-              asString(b.text)
-            );
+            if (placeName) return placeName;
+
+            const nameOrTitle = asString(b.name) || asString(b.title);
+            if (nameOrTitle) return nameOrTitle;
+
+            const depart = b.depart as Record<string, unknown> | undefined;
+            const arrive = b.arrive as Record<string, unknown> | undefined;
+            if (depart || arrive) {
+              const endpoint = (ep?: Record<string, unknown>) => {
+                if (!ep) return "";
+                const airport = ep.airport as Record<string, unknown> | undefined;
+                const place = ep.place as Record<string, unknown> | undefined;
+                return (
+                  asString(airport?.iata) ||
+                  asString(airport?.cityName) ||
+                  asString(place?.name)
+                );
+              };
+              const from = endpoint(depart);
+              const to = endpoint(arrive);
+              const route = from && to ? `${from} → ${to}` : from || to;
+              const date = asString(depart?.date) || asString(arrive?.date);
+              const flight = b.flightInfo as Record<string, unknown> | undefined;
+              const flightNum = asString(flight?.flightNumber);
+              const prefix = flightNum ? `${flightNum}: ` : "";
+              const suffix = date ? ` (${date})` : "";
+              if (route || flightNum) return `${prefix}${route || "Scheduled"}${suffix}`;
+            }
+
+            return asString(b.text);
           })
           .filter(Boolean)
       : [];
