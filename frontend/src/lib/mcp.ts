@@ -64,6 +64,45 @@ export async function createAntigravityToolsMCPClient() {
   return createMCPClient({ transport });
 }
 
+export function normalizeMCPTools(
+  rawTools: Record<string, unknown>,
+  options: {
+    blockTools?: Set<string>;
+    requireApprovalFor?: Set<string>;
+  } = {},
+): Record<string, any> {
+  const { blockTools = new Set(), requireApprovalFor = new Set() } = options;
+  const out: Record<string, any> = {};
+
+  for (const [name, rawDef] of Object.entries(rawTools)) {
+    if (blockTools.has(name)) continue;
+    const def = rawDef as {
+      description?: string;
+      parameters?: unknown;
+      inputSchema?: unknown;
+      execute?: (args: Record<string, unknown>, ctx: any) => PromiseLike<unknown>;
+    };
+
+    const parameters = def.parameters ?? def.inputSchema;
+    const baseTool: Record<string, any> = {
+      description: def.description,
+      parameters,
+    };
+
+    if (!requireApprovalFor.has(name) && def.execute) {
+      const origExecute = def.execute;
+      baseTool.execute = async (args: Record<string, unknown>, ctx: any) => {
+        const res = await origExecute(args, ctx);
+        return extractMCPTextResult(res);
+      };
+    }
+
+    out[name] = baseTool;
+  }
+
+  return out;
+}
+
 export async function callMCPTool(
   tools: Record<string, unknown>,
   toolName: string,

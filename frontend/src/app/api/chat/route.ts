@@ -1,10 +1,28 @@
-import { anthropic } from "@ai-sdk/anthropic";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { convertToCoreMessages, streamText } from "ai";
+
+const anthropic = createAnthropic({
+  fetch: async (url, init) => {
+    if (init?.body && typeof init.body === "string") {
+      try {
+        const parsed = JSON.parse(init.body);
+        if ("temperature" in parsed) {
+          delete parsed.temperature;
+          init = { ...init, body: JSON.stringify(parsed) };
+        }
+      } catch {
+        // Pass through non-JSON bodies unchanged
+      }
+    }
+    return fetch(url, init);
+  },
+});
 import {
   BLOCKED_WANDERLOG_TOOLS,
   MUTATION_WANDERLOG_TOOLS,
   createAntigravityToolsMCPClient,
   createWanderlogMCPClient,
+  normalizeMCPTools,
 } from "@/lib/mcp";
 
 export const maxDuration = 120;
@@ -30,22 +48,16 @@ export async function POST(req: Request) {
   ]);
 
   try {
-    const [rawWanderlogTools, agyTools] = await Promise.all([
+    const [rawWanderlogTools, rawAgyTools] = await Promise.all([
       wanderlogClient.tools(),
       agyClient.tools(),
     ]);
 
-    // Filter out blocked tools and strip `execute` from mutation tools so the UI gates approval
-    const gatedWanderlogTools: Record<string, any> = {};
-    for (const [name, toolDef] of Object.entries(rawWanderlogTools)) {
-      if (BLOCKED_WANDERLOG_TOOLS.has(name)) continue;
-      if (MUTATION_WANDERLOG_TOOLS.has(name)) {
-        const { execute: _omit, ...clientApprovalTool } = toolDef as any;
-        gatedWanderlogTools[name] = clientApprovalTool;
-      } else {
-        gatedWanderlogTools[name] = toolDef;
-      }
-    }
+    const agyTools = normalizeMCPTools(rawAgyTools);
+    const gatedWanderlogTools = normalizeMCPTools(rawWanderlogTools, {
+      blockTools: BLOCKED_WANDERLOG_TOOLS,
+      requireApprovalFor: MUTATION_WANDERLOG_TOOLS,
+    });
 
     const tripContextNote = selectedTripId
       ? `\n\nThe user currently has Wanderlog trip ID "${selectedTripId}" open in the workspace panel.`
@@ -60,12 +72,20 @@ export async function POST(req: Request) {
         ...gatedWanderlogTools,
       },
       maxSteps: 6,
+      onError: ({ error }) => {
+        console.error("[/api/chat] streamText error:", error);
+      },
       onFinish: async () => {
         await Promise.allSettled([wanderlogClient.close(), agyClient.close()]);
       },
     });
 
-    return result.toDataStreamResponse();
+    return result.toDataStreamResponse({
+      getErrorMessage: (err) => {
+        console.error("[/api/chat] response error:", err);
+        return err instanceof Error ? err.message : String(err);
+      },
+    });
   } catch (error) {
     await Promise.allSettled([wanderlogClient.close(), agyClient.close()]);
     const message = error instanceof Error ? error.message : "Failed to run chat";
