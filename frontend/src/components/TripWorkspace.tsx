@@ -4,14 +4,11 @@ import {
   ArrowDown,
   ArrowUp,
   Calendar,
-  Compass,
   ExternalLink,
-  Hotel,
   List,
   Map as MapIcon,
   MapPin,
   Pencil,
-  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
@@ -26,14 +23,12 @@ export interface TripSummary {
 }
 
 interface TripWorkspaceProps {
-  trips: TripSummary[];
+  selectedTrip?: TripSummary;
   selectedTripId: string;
-  onSelectTrip: (tripId: string) => void;
   tripDetail: Record<string, unknown> | null;
-  loadingTrips: boolean;
   loadingDetail: boolean;
   onRefresh: () => void;
-  onQuickPrompt: (prompt: string) => void;
+  fullWidth?: boolean;
 }
 
 function asString(val: unknown): string {
@@ -215,14 +210,12 @@ function extractMarkers(detail: Record<string, unknown> | null): MapMarker[] {
 }
 
 export function TripWorkspace({
-  trips,
+  selectedTrip,
   selectedTripId,
-  onSelectTrip,
   tripDetail,
-  loadingTrips,
   loadingDetail,
   onRefresh,
-  onQuickPrompt,
+  fullWidth = false,
 }: TripWorkspaceProps) {
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [editMode, setEditMode] = useState(false);
@@ -231,7 +224,6 @@ export function TripWorkspace({
   const [actionError, setActionError] = useState<string | null>(null);
   const days = extractDays(tripDetail);
   const markers = extractMarkers(tripDetail);
-  const selectedTrip = trips.find((t) => (t.id || t.tripId) === selectedTripId);
 
   const runTripMutation = async (toolName: string, args: Record<string, unknown>, blockId?: number) => {
     if (blockId != null) setBusyBlockId(blockId);
@@ -257,127 +249,206 @@ export function TripWorkspace({
   };
 
   return (
-    <aside className="w-full lg:w-88 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-950/90 flex flex-col max-h-[42vh] lg:max-h-screen">
-      <div className="p-4 border-b border-slate-800 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-emerald-400" />
-            <h2 className="text-sm font-semibold text-slate-100">Wanderlog Workspace</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            title="Refresh trips"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingTrips || loadingDetail ? "animate-spin" : ""}`} />
-          </button>
+    <section className="h-full flex flex-col bg-slate-950/70">
+      <div className="px-4 py-2.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+          <h2 className="text-xs font-semibold text-slate-200 truncate">
+            {selectedTrip?.title || "Trip Workspace"}
+          </h2>
         </div>
 
-        <select
-          value={selectedTripId}
-          onChange={(e) => onSelectTrip(e.target.value)}
-          className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
-        >
-          <option value="">Select a Wanderlog trip...</option>
-          {trips.map((t) => {
-            const id = t.id || t.tripId || "";
-            return (
-              <option key={id} value={id}>
-                {t.title || id}
-              </option>
-            );
-          })}
-        </select>
-
-        {selectedTrip && (
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  onQuickPrompt(
-                    `Run an AI Council cross-check on trip "${selectedTrip.title || selectedTripId}" (ID: ${selectedTripId}).`,
-                  )
-                }
-                className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-medium bg-violet-950/70 hover:bg-violet-900/70 text-violet-200 border border-violet-800/60 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
-              >
-                <Compass className="w-3.5 h-3.5" /> Council Check
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  onQuickPrompt(
-                    `Search Booking.com and Agoda hotels for trip "${selectedTrip.title || selectedTripId}"${
-                      selectedTrip.startDate && selectedTrip.endDate
-                        ? ` from ${selectedTrip.startDate} to ${selectedTrip.endDate}`
-                        : ""
-                    }.`,
-                  )
-                }
-                className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-medium bg-sky-950/70 hover:bg-sky-900/70 text-sky-200 border border-sky-800/60 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
-              >
-                <Hotel className="w-3.5 h-3.5" /> Find Hotels
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 rounded-xl bg-slate-900 p-1 border border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={`inline-flex items-center justify-center gap-1 py-1 rounded-lg font-medium transition cursor-pointer ${
-                  viewMode === "list" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <List className="w-3.5 h-3.5" /> Itinerary
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("map")}
-                className={`inline-flex items-center justify-center gap-1 py-1 rounded-lg font-medium transition cursor-pointer ${
-                  viewMode === "map" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <MapIcon className="w-3.5 h-3.5" /> Map ({markers.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("list");
-                  setEditMode((v) => !v);
-                }}
-                className={`inline-flex items-center justify-center gap-1 py-1 rounded-lg font-medium transition cursor-pointer ${
-                  editMode ? "bg-amber-950 text-amber-200 border border-amber-800/60" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <Pencil className="w-3 h-3" /> {editMode ? "Done" : "Arrange"}
-              </button>
-            </div>
-            {actionError && (
-              <p className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-800/50 rounded-lg px-2 py-1">
-                {actionError}
-              </p>
+        {selectedTripId && (
+          <div className="flex items-center gap-2">
+            {!fullWidth && (
+              <div className="inline-flex rounded-xl bg-slate-900 p-0.5 border border-slate-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                    viewMode === "list" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" /> Itinerary
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("map")}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                    viewMode === "map" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <MapIcon className="w-3.5 h-3.5" /> Map ({markers.length})
+                </button>
+              </div>
             )}
+            <button
+              type="button"
+              onClick={() => {
+                if (!fullWidth) setViewMode("list");
+                setEditMode((v) => !v);
+              }}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                editMode
+                  ? "bg-amber-950 text-amber-200 border-amber-800/60"
+                  : "bg-slate-900 border-slate-800 text-slate-300 hover:text-slate-100"
+              }`}
+            >
+              <Pencil className="w-3 h-3" /> {editMode ? "Done" : "Arrange"}
+            </button>
           </div>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {actionError && (
+        <p className="mx-4 mt-2 text-[11px] text-rose-300 bg-rose-950/40 border border-rose-800/50 rounded-lg px-2.5 py-1.5">
+          {actionError}
+        </p>
+      )}
+
+      <div className="flex-1 overflow-y-auto p-4">
         {!selectedTripId ? (
-          <p className="text-xs text-slate-500">Select a trip above to inspect its itinerary and run one-click checks.</p>
+          <div className="h-full flex items-center justify-center text-xs text-slate-500">
+            Select a Wanderlog trip from the top bar to inspect its itinerary, map, and arrange stops.
+          </div>
         ) : loadingDetail ? (
           <p className="text-xs text-slate-400">Loading itinerary from Wanderlog MCP...</p>
+        ) : fullWidth ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {days.map((day, i) => (
+                <div key={i} className="rounded-xl border border-slate-800/90 bg-slate-900/50 p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                    {day.title}
+                  </div>
+                  {day.items.length > 0 ? (
+                    <ul className="space-y-1.5 pl-4 list-disc text-xs text-slate-400">
+                      {day.items.map((item, j) => (
+                        <li key={item.blockId ?? j} className="space-y-1">
+                          <div className="flex items-center justify-between gap-1.5">
+                            {item.url ? (
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-sky-300/90 hover:text-sky-200 hover:underline"
+                              >
+                                <span>{item.label}</span>
+                                <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                              </a>
+                            ) : (
+                              <span>{item.label}</span>
+                            )}
+                          </div>
+                          {editMode && item.blockId != null && item.sectionId != null && (
+                            <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                              {item.isPlace && (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={busyBlockId === item.blockId || j === 0}
+                                    onClick={() =>
+                                      runTripMutation(
+                                        "move_place",
+                                        {
+                                          trip_key: selectedTripId,
+                                          place_id: item.blockId,
+                                          from_section_id: item.sectionId,
+                                          to_section_id: item.sectionId,
+                                          position: Math.max(0, j - 1),
+                                        },
+                                        item.blockId,
+                                      )
+                                    }
+                                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 cursor-pointer"
+                                  >
+                                    <ArrowUp className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={busyBlockId === item.blockId || j === day.items.length - 1}
+                                    onClick={() =>
+                                      runTripMutation(
+                                        "move_place",
+                                        {
+                                          trip_key: selectedTripId,
+                                          place_id: item.blockId,
+                                          from_section_id: item.sectionId,
+                                          to_section_id: item.sectionId,
+                                          position: j + 1,
+                                        },
+                                        item.blockId,
+                                      )
+                                    }
+                                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 cursor-pointer"
+                                  >
+                                    <ArrowDown className="w-3 h-3" />
+                                  </button>
+                                </>
+                              )}
+                              {confirmDeleteId === item.blockId ? (
+                                <button
+                                  type="button"
+                                  disabled={busyBlockId === item.blockId}
+                                  onClick={() =>
+                                    runTripMutation(
+                                      "delete_itinerary_block",
+                                      {
+                                        trip_key: selectedTripId,
+                                        block_id: item.blockId,
+                                        section_id: item.sectionId,
+                                        confirm: true,
+                                      },
+                                      item.blockId,
+                                    )
+                                  }
+                                  className="px-1.5 py-0.5 rounded bg-rose-700 hover:bg-rose-600 text-[10px] font-semibold text-white cursor-pointer"
+                                >
+                                  Confirm
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={busyBlockId === item.blockId}
+                                  onClick={() => setConfirmDeleteId(item.blockId!)}
+                                  className="p-1 rounded bg-slate-800 hover:bg-rose-900/70 text-slate-400 hover:text-rose-200 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 pl-4">No places scheduled</p>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="lg:sticky lg:top-0">
+              <InteractiveMap
+                title={selectedTrip?.title || "Trip Map"}
+                markers={markers}
+                drawRoute={true}
+                heightClass="h-[70vh]"
+              />
+            </div>
+          </div>
         ) : viewMode === "map" ? (
           <InteractiveMap
             title={selectedTrip?.title || "Trip Map"}
             markers={markers}
             drawRoute={true}
-            heightClass="h-80"
+            heightClass="h-[68vh]"
           />
         ) : days.length === 0 ? (
           <p className="text-xs text-slate-500">No itinerary days found yet for this trip.</p>
         ) : (
-          days.map((day, i) => (
+          <div className="space-y-3">
+            {days.map((day, i) => (
             <div key={i} className="rounded-xl border border-slate-800/90 bg-slate-900/50 p-3 space-y-1.5">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
                 <Calendar className="w-3.5 h-3.5 text-emerald-400" />
@@ -520,9 +591,10 @@ export function TripWorkspace({
                 <p className="text-[11px] text-slate-500 pl-5">No places scheduled</p>
               )}
             </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
-    </aside>
+    </section>
   );
 }

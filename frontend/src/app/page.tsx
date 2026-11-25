@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { Loader2, Plane, Send, Sparkles, Wrench } from "lucide-react";
+import { Compass, Hotel, LayoutPanelLeft, Loader2, MapPin, MessageSquare, Plane, RefreshCw, Send, Sparkles, Wrench } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { BookedHotelCard, BookedHotelData } from "@/components/BookedHotelCard";
@@ -61,6 +61,7 @@ export default function TravelPlannerPage() {
   const [tripDetail, setTripDetail] = useState<Record<string, unknown> | null>(null);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<"split" | "trip" | "chat">("split");
 
   const loadTrips = useCallback(async () => {
     setLoadingTrips(true);
@@ -131,41 +132,144 @@ export default function TravelPlannerPage() {
     });
   };
 
-  return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#090d16] text-slate-100">
-      <ErrorBoundary scope="Wanderlog Workspace">
-        <TripWorkspace
-          trips={trips}
-          selectedTripId={selectedTripId}
-          onSelectTrip={setSelectedTripId}
-          tripDetail={tripDetail}
-          loadingTrips={loadingTrips}
-          loadingDetail={loadingDetail}
-          onRefresh={() => {
-            loadTrips();
-            if (selectedTripId) loadTripDetail(selectedTripId);
-          }}
-          onQuickPrompt={(prompt) => append({ role: "user", content: prompt })}
-        />
-      </ErrorBoundary>
+  const selectedTrip = trips.find((t) => (t.id || t.tripId) === selectedTripId);
 
-      <main className="flex-1 flex flex-col h-[58vh] lg:h-screen">
-        <header className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center">
-              <Plane className="w-4 h-4 text-indigo-400" />
-            </div>
-            <div>
-              <h1 className="text-sm font-semibold text-slate-100">Antigravity Travel Planner</h1>
-              <p className="text-[11px] text-slate-400">
-                MCP-powered • Wanderlog + Booking.com + Agoda + AI Council
-              </p>
-            </div>
+  return (
+    <div className="h-screen flex flex-col bg-[#090d16] text-slate-100 overflow-hidden">
+      <header className="px-4 py-2.5 border-b border-slate-800 bg-slate-950/90 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center">
+            <Plane className="w-4 h-4 text-indigo-400" />
           </div>
-          <span className="text-[11px] text-emerald-300 bg-emerald-950/60 border border-emerald-800/50 px-2.5 py-1 rounded-full">
-            Approval-Gated Writes
-          </span>
-        </header>
+          <div className="hidden sm:block">
+            <h1 className="text-sm font-semibold text-slate-100 leading-tight">Antigravity Travel Planner</h1>
+            <p className="text-[11px] text-slate-400">Wanderlog + Booking.com + Agoda + AI Council</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 flex-1 justify-center max-w-2xl">
+          <select
+            value={selectedTripId}
+            onChange={(e) => setSelectedTripId(e.target.value)}
+            className="min-w-52 max-w-xs flex-1 rounded-xl border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+          >
+            <option value="">Select a Wanderlog trip...</option>
+            {trips.map((t) => {
+              const id = t.id || t.tripId || "";
+              return (
+                <option key={id} value={id}>
+                  {t.title || id}
+                </option>
+              );
+            })}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => {
+              loadTrips();
+              if (selectedTripId) loadTripDetail(selectedTripId);
+            }}
+            title="Refresh trips"
+            className="p-1.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingTrips || loadingDetail ? "animate-spin" : ""}`} />
+          </button>
+
+          {selectedTrip && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  if (layoutMode === "trip") setLayoutMode("split");
+                  append({
+                    role: "user",
+                    content: `Run an AI Council cross-check on trip "${selectedTrip.title || selectedTripId}" (ID: ${selectedTripId}).`,
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-medium bg-violet-950/70 hover:bg-violet-900/70 text-violet-200 border border-violet-800/60 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
+              >
+                <Compass className="w-3.5 h-3.5" /> Council Check
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (layoutMode === "trip") setLayoutMode("split");
+                  append({
+                    role: "user",
+                    content: `Search Booking.com and Agoda hotels for trip "${selectedTrip.title || selectedTripId}"${
+                      selectedTrip.startDate && selectedTrip.endDate
+                        ? ` from ${selectedTrip.startDate} to ${selectedTrip.endDate}`
+                        : ""
+                    }.`,
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-medium bg-sky-950/70 hover:bg-sky-900/70 text-sky-200 border border-sky-800/60 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
+              >
+                <Hotel className="w-3.5 h-3.5" /> Find Hotels
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="inline-flex rounded-xl bg-slate-900 p-0.5 border border-slate-800 text-xs">
+          <button
+            type="button"
+            onClick={() => setLayoutMode("split")}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+              layoutMode === "split" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <LayoutPanelLeft className="w-3.5 h-3.5" /> Split
+          </button>
+          <button
+            type="button"
+            onClick={() => setLayoutMode("trip")}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+              layoutMode === "trip" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <MapPin className="w-3.5 h-3.5" /> Trip
+          </button>
+          <button
+            type="button"
+            onClick={() => setLayoutMode("chat")}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+              layoutMode === "chat" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" /> Chat
+          </button>
+        </div>
+      </header>
+
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+        {layoutMode !== "chat" && (
+          <div
+            className={
+              layoutMode === "trip"
+                ? "flex-1 min-h-0"
+                : "w-full lg:w-[44%] xl:w-[42%] border-b lg:border-b-0 lg:border-r border-slate-800 min-h-0 h-[42vh] lg:h-full"
+            }
+          >
+            <ErrorBoundary scope="Wanderlog Workspace">
+              <TripWorkspace
+                selectedTrip={selectedTrip}
+                selectedTripId={selectedTripId}
+                tripDetail={tripDetail}
+                loadingDetail={loadingDetail}
+                fullWidth={layoutMode === "trip"}
+                onRefresh={() => {
+                  loadTrips();
+                  if (selectedTripId) loadTripDetail(selectedTripId);
+                }}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {layoutMode !== "trip" && (
+          <main className="flex-1 flex flex-col min-h-0">
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
           {messages.length === 0 && (
@@ -344,6 +448,8 @@ export default function TravelPlannerPage() {
           </div>
         </form>
       </main>
+        )}
+      </div>
     </div>
   );
 }
