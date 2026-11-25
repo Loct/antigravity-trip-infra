@@ -1,5 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { convertToCoreMessages, streamText } from "ai";
+import { convertToCoreMessages, streamText, tool } from "ai";
+import { z } from "zod";
 
 const anthropic = createAnthropic({
   fetch: async (url, init) => {
@@ -34,6 +35,7 @@ Core Rules:
    - Use "search_hotels_dual_ota" whenever searching for hotels/lodging so Booking.com (Genius) and Agoda (AgodaVIP) are compared side-by-side.
    - Use "ai_council_ask", "ai_council_crosscheck", and "ai_council_debate" to collaborate with Claude & DeepSeek on itinerary quality, transit, dining, and opening hours.
    - Use "list_trips", "get_trip", "get_itinerary", and "get_trip_places" to inspect existing Wanderlog trips.
+   - Whenever presenting a booked or planned hotel from a Wanderlog trip, ALWAYS call "display_hotel_card" so the UI renders a rich Hotel Card instead of a raw table.
 2. Approval-Gated Mutations:
    - Never delete trips.
    - Whenever you want to modify a Wanderlog trip (add_place, add_lodging, add_flight, update_place_visit_time, etc.), call the mutation tool directly — the UI will automatically pause and present an Approve / Cancel card to the user before executing it.
@@ -63,6 +65,28 @@ export async function POST(req: Request) {
       ? `\n\nThe user currently has Wanderlog trip ID "${selectedTripId}" open in the workspace panel.`
       : "";
 
+    const displayHotelCardTool = tool({
+      description:
+        "Render a rich Hotel Card in the UI for a booked or planned hotel from a Wanderlog trip.",
+      parameters: z.object({
+        name: z.string(),
+        address: z.string().optional(),
+        checkIn: z.string().optional(),
+        checkOut: z.string().optional(),
+        nights: z.number().optional(),
+        confirmationNumber: z.string().optional(),
+        bookedUnder: z.string().optional(),
+        cost: z.string().optional(),
+        rating: z.number().optional(),
+        reviewCount: z.number().optional(),
+        phone: z.string().optional(),
+        provider: z.string().optional(),
+        url: z.string().optional(),
+        notes: z.string().optional(),
+      }),
+      execute: async (args) => args,
+    });
+
     const result = streamText({
       model: anthropic(process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"),
       system: SYSTEM_PROMPT + tripContextNote,
@@ -70,6 +94,7 @@ export async function POST(req: Request) {
       tools: {
         ...agyTools,
         ...gatedWanderlogTools,
+        display_hotel_card: displayHotelCardTool,
       },
       maxSteps: 6,
       onError: ({ error }) => {

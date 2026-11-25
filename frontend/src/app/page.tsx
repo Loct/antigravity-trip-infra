@@ -4,9 +4,11 @@ import { useChat } from "@ai-sdk/react";
 import { Loader2, Plane, Send, Sparkles, Wrench } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ApprovalCard } from "@/components/ApprovalCard";
+import { BookedHotelCard, BookedHotelData } from "@/components/BookedHotelCard";
 import { CouncilCard } from "@/components/CouncilCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { HotelComparisonCard } from "@/components/HotelComparisonCard";
+import { MarkdownContent } from "@/components/MarkdownContent";
 import { TripSummary, TripWorkspace } from "@/components/TripWorkspace";
 
 const HOTEL_TOOLS = new Set(["search_hotels_dual_ota", "booking_search_hotels", "agoda_search_hotels"]);
@@ -201,11 +203,18 @@ export default function TravelPlannerPage() {
                     : "space-y-2"
                 }`}
               >
-                {m.content && (
-                  <div className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{m.content}</div>
-                )}
+                {m.content &&
+                  (m.role === "user" ? (
+                    <div className="text-sm text-slate-100 whitespace-pre-wrap leading-relaxed">{m.content}</div>
+                  ) : (
+                    <MarkdownContent content={m.content} />
+                  ))}
 
                 {m.toolInvocations?.map((inv) => {
+                  if (inv.state === "result" && inv.toolName === "display_hotel_card") {
+                    return <BookedHotelCard key={inv.toolCallId} data={(inv.result || {}) as BookedHotelData} />;
+                  }
+
                   if (MUTATION_TOOLS.has(inv.toolName)) {
                     return (
                       <ApprovalCard
