@@ -21,6 +21,10 @@ interface TripWorkspaceProps {
   onQuickPrompt: (prompt: string) => void;
 }
 
+function asString(val: unknown): string {
+  return typeof val === "string" ? val.trim() : "";
+}
+
 function extractDays(detail: Record<string, unknown> | null): Array<{ title: string; items: string[] }> {
   if (!detail) return [];
   const outer = detail.itinerary as Record<string, unknown> | undefined;
@@ -34,26 +38,25 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
   if (!Array.isArray(sections)) return [];
   return sections.slice(0, 30).map((sec, idx) => {
     const heading =
-      (sec.displayHeading as string) ||
-      (sec.heading as string) ||
-      (sec.title as string) ||
-      (sec.date as string) ||
+      asString(sec.displayHeading) ||
+      asString(sec.heading) ||
+      asString(sec.title) ||
+      asString(sec.date) ||
       `Day ${idx + 1}`;
     const blocks = (sec.blocks as Array<Record<string, unknown>>) || (sec.places as Array<Record<string, unknown>>) || [];
     const items = Array.isArray(blocks)
       ? blocks
           .map((b) => {
-            const placeName = (b.place as Record<string, unknown> | undefined)?.name as string | undefined;
+            const placeName = asString((b.place as Record<string, unknown> | undefined)?.name);
             const flight = b.flightInfo as Record<string, unknown> | undefined;
-            const flightLabel = flight?.flightNumber ? `Flight ${flight.flightNumber}` : "";
+            const flightLabel = asString(flight?.flightNumber) ? `Flight ${asString(flight?.flightNumber)}` : "";
             return (
               placeName ||
-              (b.name as string) ||
-              (b.title as string) ||
+              asString(b.name) ||
+              asString(b.title) ||
               flightLabel ||
-              (b.text as string) ||
-              ""
-            ).trim();
+              asString(b.text)
+            );
           })
           .filter(Boolean)
       : [];
