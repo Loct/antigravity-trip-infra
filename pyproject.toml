@@ -15,6 +15,7 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "sqlalchemy>=2.0.0",
     "greenlet>=3.0.0",
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -51,6 +52,7 @@ known-first-party = [
     "claude_validator",
     "cross_check_validator",
     "deepseek_validator",
+    "mcp_server",
 ]
 
 [tool.pytest.ini_options]

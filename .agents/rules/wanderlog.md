@@ -22,14 +22,14 @@ These rules govern all Antigravity interactions with Wanderlog trips, itinerary 
 > **Every mutation to Wanderlog data MUST be checked and verified by the user before execution.**
 
 ### What Constitutes a Mutation:
-- Creating a new trip (`wanderlog trips create`, `create_trip`)
-- Copying an existing trip (`wanderlog trips copy`)
-- Adding places, sights, or restaurants (`wanderlog trips edit add-place`, `add_place`)
-- Updating place visit times or notes (`wanderlog trips edit set-place-time`, `update_place_visit_time`)
-- Removing place blocks or itinerary items (`wanderlog trips edit remove-place`, `delete_itinerary_block`)
-- Adding or updating flights (`wanderlog trips flight add/update`, `add_flight`)
-- Adding or updating lodging / hotels (`wanderlog trips lodging add`, `add_lodging`)
-- Setting or adjusting budgets and expenses (`wanderlog trips budget set`, `wanderlog trips expenses add`)
+- Creating a new trip (`create_trip`)
+- Copying an existing trip (`copy_trip`)
+- Adding places, sights, or restaurants (`add_place`)
+- Updating place visit times or notes (`update_place_visit_time`, `update_place_notes`)
+- Removing place blocks or itinerary items (`remove_place`, `delete_itinerary_block`)
+- Adding or updating flights (`add_flight`, `update_flight`)
+- Adding or updating lodging / hotels (`add_lodging`, `update_lodging`)
+- Setting or adjusting budgets and expenses (`set_trip_budget`, `add_trip_expense`, `update_trip_expense`)
 
 ### Mutation Protocol:
 Before executing ANY mutation command or MCP tool:
@@ -42,17 +42,18 @@ Before executing ANY mutation command or MCP tool:
 
 ---
 
-## 3. Autonomous Read-Only Operations
+## 3. Autonomous Read-Only Operations (Use MCP Tools)
 
-Read-only inspection commands do **NOT** require prior user confirmation and can be run autonomously to gather context:
-- `wanderlog trips list`
-- `wanderlog trips show <trip-id> [--details]`
-- `wanderlog trips places <trip-id>`
-- `wanderlog trips expenses <trip-id>`
-- `wanderlog status`
-- MCP tools: `list_trips`, `get_trip`
+**Always use the `wanderlog` MCP server tools** instead of running `wanderlog` CLI commands in a shell. Read-only inspection MCP tools do **NOT** require prior user confirmation and can be run autonomously to gather context:
+- `list_trips`
+- `get_trip`
+- `get_itinerary`
+- `get_trip_places`
+- `get_flights`
+- `get_trip_expenses_csv`
+- `get_me`
 
-Always inspect existing trips with `wanderlog trips list` first to obtain valid trip IDs and prevent duplicate trip creation.
+Always inspect existing trips with `list_trips` first to obtain valid trip IDs and prevent duplicate trip creation.
 
 ---
 
@@ -63,6 +64,6 @@ Always inspect existing trips with `wanderlog trips list` first to obtain valid 
    - Times must strictly use 24-hour format: `HH:MM`.
    - Ensure itinerary blocks within a day are strictly chronological.
 2. **Coordinates**:
-   - Always include `--lat` and `--lng` whenever geographic coordinates are known to ensure Wanderlog map pins and routing function accurately.
+   - Always include `lat` and `lng` (or `placeId`) whenever geographic coordinates are known to ensure Wanderlog map pins and routing function accurately.
 3. **Presentation**:
-   - Use `wanderlog trips show <trip-id> --details --output markdown` when presenting completed trip itineraries to the user.
+   - Use `get_trip` / `get_itinerary` when presenting completed trip itineraries to the user.

@@ -8,10 +8,13 @@
   3. Push the feature branch to remote origin (`git push -u origin <branch>`).
   4. Open a Pull Request using `gh pr create` for user review and merging.
 
+## MCP-First Tool Execution Policy
+- **Always Use MCP Tools Instead of CLIs**: Whenever an MCP tool is available (`wanderlog` MCP server for trips, itineraries, places, lodging, flights, and expenses; `antigravity-tools` MCP server for Booking.com, Agoda, AI Travel Council, trip validators, OTA/AI auth status, and self-update checks), Antigravity MUST call the MCP tool directly rather than running `wanderlog ...` or `uv run scripts/...` in a shell.
+
 ## Hotel & Lodging Search & Booking Policies
-- **Always Use Workspace CLIs**: When searching, comparing, pricing, or looking up accommodations/hotels/lodging, Antigravity MUST ALWAYS execute the workspace lodging scripts (`uv run scripts/booking.py` and `uv run scripts/agoda.py`) rather than relying on generic public web searches or external guesses. The user has active account credentials, session cookies, and Genius Level loyalty discounts configured in the workspace CLI.
+- **Always Use Workspace MCP Tools**: When searching, comparing, pricing, or looking up accommodations/hotels/lodging, Antigravity MUST ALWAYS use the `antigravity-tools` MCP tools (`search_hotels_dual_ota`, `booking_search_hotels`, `agoda_search_hotels`, `check_ota_auth_status`) rather than relying on generic public web searches, external guesses, or shell CLI scripts. The user has active account credentials, session cookies, and Genius Level loyalty discounts configured in the workspace.
 - **Mandatory Dual-OTA Search & Comparative Overview**: Whenever the user asks for hotels, accommodations, or lodging in any destination:
-  1. Antigravity MUST ALWAYS search **BOTH** Booking.com (`uv run scripts/booking.py search -l <city> ...`) and Agoda (`uv run scripts/agoda.py search -l <city> ...`).
+  1. Antigravity MUST ALWAYS search **BOTH** Booking.com and Agoda using `search_hotels_dual_ota` (or both `booking_search_hotels` and `agoda_search_hotels`).
   2. Synthesize results side-by-side in a comparative overview table that compares: Property Name, Provider (Booking.com vs. Agoda), Nightly / Total Rate (with Genius Lv3 or AgodaVIP discounts clearly highlighted), Review Score, Key Amenities (Free Cancellation, Breakfast), and Direct Booking Link.
   3. Highlight which platform offers the better deal or perks for comparable stays.
 - **Valid Direct URLs Required**: When returning or displaying properties:
@@ -26,10 +29,10 @@
 
 ## Conversational AI Travel Council (Claude & DeepSeek)
 - **Conversational Collaboration & Cross-Checking**:
-  When planning, modifying, auditing, or discussing a trip, do not act in isolation or rely on rigid one-way audit dumps. Actively converse with Anthropic Claude and DeepSeek using `scripts/ai_council.py`:
-  1. **Ask Targeted Questions**: Bounce ideas off the council (`uv run scripts/ai_council.py "<question>" --trip <id_or_file> --session <session_id> --format json`).
-  2. **Cross-Check Itinerary Data**: Perform 2-round mutual peer review on transit, opening hours, dining authenticity, and hotel continuity (`uv run scripts/ai_council.py --trip <id_or_file> --crosscheck [--day <N>] [--aspect transit|dining|hours|hotels|all]`).
-  3. **Debate Itinerary Options**: Run structured debates on travel dilemmas (`uv run scripts/ai_council.py --trip <id_or_file> --debate "<topic>"`).
+  When planning, modifying, auditing, or discussing a trip, do not act in isolation or rely on rigid one-way audit dumps. Actively converse with Anthropic Claude and DeepSeek using the `antigravity-tools` MCP server:
+  1. **Ask Targeted Questions**: Bounce ideas off the council using `ai_council_ask` (`query`, `trip`, `session_id`, `target_days`, `aspect`).
+  2. **Cross-Check Itinerary Data**: Perform 2-round mutual peer review on transit, opening hours, dining authenticity, and hotel continuity using `ai_council_crosscheck` (`trip`, `aspect`, `target_days`, `session_id`).
+  3. **Debate Itinerary Options**: Run structured debates on travel dilemmas using `ai_council_debate` (`topic`, `trip`, `session_id`, `target_days`, `aspect`).
 - **Conversational Synthesis**:
   Present the dialogue naturally to the user: Claude's cultural/experiential view, DeepSeek's transit/logistics view, their cross-talk review of each other, and Antigravity's vetted recommendation.
 - **Trip Mutation Confirmation**:

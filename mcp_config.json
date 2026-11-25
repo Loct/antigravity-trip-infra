@@ -10,6 +10,15 @@
         "WANDERLOG_AUTH_SESSION_COOKIE": "${WANDERLOG_AUTH_SESSION_COOKIE}",
         "WANDERLOG_AUTH_SESSION_XSRF_TOKEN": "cookie_auth"
       }
+    },
+    "antigravity-tools": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/workspace",
+        "scripts/mcp_server.py"
+      ]
     }
   }
 }
