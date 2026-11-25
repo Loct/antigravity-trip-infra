@@ -10,7 +10,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { HotelComparisonCard } from "@/components/HotelComparisonCard";
 import { InteractiveMap, MapMarker } from "@/components/InteractiveMap";
 import { MarkdownContent } from "@/components/MarkdownContent";
-import { TripSummary, TripWorkspace } from "@/components/TripWorkspace";
+import { RecommendedPlace, RecommendedPlacesCard } from "@/components/RecommendedPlacesCard";
+import { extractDays, TripSummary, TripWorkspace } from "@/components/TripWorkspace";
 
 const HOTEL_TOOLS = new Set(["search_hotels_dual_ota", "booking_search_hotels", "agoda_search_hotels"]);
 const COUNCIL_TOOLS = new Set(["ai_council_ask", "ai_council_crosscheck", "ai_council_debate"]);
@@ -229,6 +230,30 @@ export default function TravelPlannerPage() {
                         drawRoute={mapData.drawRoute ?? true}
                         markers={mapData.markers || []}
                         heightClass="h-80"
+                      />
+                    );
+                  }
+
+                  if (inv.state === "result" && inv.toolName === "display_place_recommendations") {
+                    const recData = (inv.result || {}) as {
+                      title?: string;
+                      places?: RecommendedPlace[];
+                    };
+                    const tripSections = extractDays(tripDetail).map((d) => ({ id: d.id, title: d.title }));
+                    return (
+                      <RecommendedPlacesCard
+                        key={inv.toolCallId}
+                        title={recData.title}
+                        places={recData.places || []}
+                        sections={tripSections}
+                        onProposeAdd={(place, targetSection) =>
+                          append({
+                            role: "user",
+                            content: `Please propose adding "${place.name}"${
+                              targetSection ? ` to "${targetSection}"` : ""
+                            } in my selected Wanderlog trip.`,
+                          })
+                        }
                       />
                     );
                   }

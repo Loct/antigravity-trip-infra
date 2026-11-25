@@ -37,6 +37,7 @@ Core Rules:
    - Use "list_trips", "get_trip", "get_itinerary", and "get_trip_places" to inspect existing Wanderlog trips.
    - Whenever presenting a booked or planned hotel from a Wanderlog trip, ALWAYS call "display_hotel_card" so the UI renders a rich Hotel Card instead of a raw table.
    - Whenever the user asks for a map, route, or geographic overview of a trip or day, ALWAYS call "display_trip_map" with the coordinates from "get_itinerary" / "get_trip_places" so the UI renders an interactive Leaflet map (NEVER draw ASCII maps).
+   - Whenever recommending restaurants, sights, cafes, or activities, ALWAYS call "display_place_recommendations" so the UI renders interactive recommendation cards with one-click "Add to Trip" buttons.
 2. Approval-Gated Mutations:
    - Never delete trips.
    - Whenever you want to modify a Wanderlog trip (add_place, add_lodging, add_flight, update_place_visit_time, etc.), call the mutation tool directly — the UI will automatically pause and present an Approve / Cancel card to the user before executing it.
@@ -109,6 +110,29 @@ export async function POST(req: Request) {
       execute: async (args) => args,
     });
 
+    const displayPlaceRecommendationsTool = tool({
+      description:
+        "Render interactive place/activity recommendation cards in the UI with Add-to-Trip buttons.",
+      parameters: z.object({
+        title: z.string().optional(),
+        places: z.array(
+          z.object({
+            name: z.string(),
+            category: z.string().optional(),
+            rating: z.number().optional(),
+            address: z.string().optional(),
+            description: z.string().optional(),
+            duration: z.string().optional(),
+            estimatedCost: z.string().optional(),
+            lat: z.number().optional(),
+            lng: z.number().optional(),
+            url: z.string().optional(),
+          }),
+        ),
+      }),
+      execute: async (args) => args,
+    });
+
     const result = streamText({
       model: anthropic(process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"),
       system: SYSTEM_PROMPT + tripContextNote,
@@ -118,6 +142,7 @@ export async function POST(req: Request) {
         ...gatedWanderlogTools,
         display_hotel_card: displayHotelCardTool,
         display_trip_map: displayTripMapTool,
+        display_place_recommendations: displayPlaceRecommendationsTool,
       },
       maxSteps: 6,
       onError: ({ error }) => {

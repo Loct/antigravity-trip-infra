@@ -1,6 +1,19 @@
 "use client";
 
-import { Calendar, Compass, ExternalLink, Hotel, List, Map as MapIcon, MapPin, RefreshCw } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Calendar,
+  Compass,
+  ExternalLink,
+  Hotel,
+  List,
+  Map as MapIcon,
+  MapPin,
+  Pencil,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { InteractiveMap, MapMarker } from "./InteractiveMap";
 
@@ -28,8 +41,17 @@ function asString(val: unknown): string {
 }
 
 interface DayItem {
+  blockId?: number;
+  sectionId?: number;
+  isPlace?: boolean;
   label: string;
   url?: string;
+}
+
+export interface DaySection {
+  id: number;
+  title: string;
+  items: DayItem[];
 }
 
 function buildPlaceUrl(place: Record<string, unknown> | undefined, label: string): string | undefined {
@@ -47,7 +69,7 @@ function buildPlaceUrl(place: Record<string, unknown> | undefined, label: string
   return undefined;
 }
 
-function extractDays(detail: Record<string, unknown> | null): Array<{ title: string; items: DayItem[] }> {
+export function extractDays(detail: Record<string, unknown> | null): DaySection[] {
   if (!detail) return [];
   const outer = detail.itinerary as Record<string, unknown> | undefined;
   const inner = (outer?.itinerary as Record<string, unknown> | undefined) || outer;
@@ -59,6 +81,7 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
 
   if (!Array.isArray(sections)) return [];
   return sections.slice(0, 30).map((sec, idx) => {
+    const sectionId = typeof sec.id === "number" ? sec.id : idx;
     const heading =
       asString(sec.displayHeading) ||
       asString(sec.heading) ||
@@ -69,15 +92,28 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
     const items: DayItem[] = Array.isArray(blocks)
       ? blocks
           .map((b): DayItem | null => {
+            const blockId = typeof b.id === "number" ? b.id : undefined;
             const place = b.place as Record<string, unknown> | undefined;
             const placeName = asString(place?.name);
             if (placeName) {
-              return { label: placeName, url: buildPlaceUrl(place, placeName) };
+              return {
+                blockId,
+                sectionId,
+                isPlace: true,
+                label: placeName,
+                url: buildPlaceUrl(place, placeName),
+              };
             }
 
             const nameOrTitle = asString(b.name) || asString(b.title);
             if (nameOrTitle) {
-              return { label: nameOrTitle, url: asString(b.url) || buildPlaceUrl(place, nameOrTitle) };
+              return {
+                blockId,
+                sectionId,
+                isPlace: Boolean(place),
+                label: nameOrTitle,
+                url: asString(b.url) || buildPlaceUrl(place, nameOrTitle),
+              };
             }
 
             const depart = b.depart as Record<string, unknown> | undefined;
@@ -104,6 +140,9 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
               if (route || flightNum) {
                 const arrivePlace = arrive?.place as Record<string, unknown> | undefined;
                 return {
+                  blockId,
+                  sectionId,
+                  isPlace: false,
                   label: `${prefix}${route || "Scheduled"}${suffix}`,
                   url: buildPlaceUrl(arrivePlace, to || route),
                 };
@@ -111,11 +150,11 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
             }
 
             const text = asString(b.text);
-            return text ? { label: text } : null;
+            return text ? { blockId, sectionId, isPlace: false, label: text } : null;
           })
           .filter((x): x is DayItem => x !== null)
       : [];
-    return { title: heading, items };
+    return { id: sectionId, title: heading, items };
   });
 }
 
@@ -186,9 +225,36 @@ export function TripWorkspace({
   onQuickPrompt,
 }: TripWorkspaceProps) {
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [editMode, setEditMode] = useState(false);
+  const [busyBlockId, setBusyBlockId] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const days = extractDays(tripDetail);
   const markers = extractMarkers(tripDetail);
   const selectedTrip = trips.find((t) => (t.id || t.tripId) === selectedTripId);
+
+  const runTripMutation = async (toolName: string, args: Record<string, unknown>, blockId?: number) => {
+    if (blockId != null) setBusyBlockId(blockId);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/mcp/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toolName, args }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        setActionError(data.error || "Failed to update trip");
+        return;
+      }
+      setConfirmDeleteId(null);
+      onRefresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to update trip");
+    } finally {
+      setBusyBlockId(null);
+    }
+  };
 
   return (
     <aside className="w-full lg:w-88 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-950/90 flex flex-col max-h-[42vh] lg:max-h-screen">
@@ -255,11 +321,11 @@ export function TripWorkspace({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 rounded-xl bg-slate-900 p-1 border border-slate-800 text-xs">
+            <div className="grid grid-cols-3 rounded-xl bg-slate-900 p-1 border border-slate-800 text-xs">
               <button
                 type="button"
                 onClick={() => setViewMode("list")}
-                className={`inline-flex items-center justify-center gap-1.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                className={`inline-flex items-center justify-center gap-1 py-1 rounded-lg font-medium transition cursor-pointer ${
                   viewMode === "list" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -268,13 +334,30 @@ export function TripWorkspace({
               <button
                 type="button"
                 onClick={() => setViewMode("map")}
-                className={`inline-flex items-center justify-center gap-1.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                className={`inline-flex items-center justify-center gap-1 py-1 rounded-lg font-medium transition cursor-pointer ${
                   viewMode === "map" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 <MapIcon className="w-3.5 h-3.5" /> Map ({markers.length})
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode("list");
+                  setEditMode((v) => !v);
+                }}
+                className={`inline-flex items-center justify-center gap-1 py-1 rounded-lg font-medium transition cursor-pointer ${
+                  editMode ? "bg-amber-950 text-amber-200 border border-amber-800/60" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Pencil className="w-3 h-3" /> {editMode ? "Done" : "Arrange"}
+              </button>
             </div>
+            {actionError && (
+              <p className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-800/50 rounded-lg px-2 py-1">
+                {actionError}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -301,21 +384,134 @@ export function TripWorkspace({
                 {day.title}
               </div>
               {day.items.length > 0 ? (
-                <ul className="space-y-1 pl-5 list-disc text-xs text-slate-400">
+                <ul className="space-y-1.5 pl-4 list-disc text-xs text-slate-400">
                   {day.items.map((item, j) => (
-                    <li key={j}>
-                      {item.url ? (
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-sky-300/90 hover:text-sky-200 hover:underline"
-                        >
+                    <li key={item.blockId ?? j} className="space-y-1">
+                      <div className="flex items-center justify-between gap-1.5">
+                        {item.url ? (
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-sky-300/90 hover:text-sky-200 hover:underline"
+                          >
+                            <span>{item.label}</span>
+                            <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                          </a>
+                        ) : (
                           <span>{item.label}</span>
-                          <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                        </a>
-                      ) : (
-                        <span>{item.label}</span>
+                        )}
+                      </div>
+
+                      {editMode && item.blockId != null && item.sectionId != null && (
+                        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                          {item.isPlace && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={busyBlockId === item.blockId || j === 0}
+                                onClick={() =>
+                                  runTripMutation(
+                                    "move_place",
+                                    {
+                                      trip_key: selectedTripId,
+                                      place_id: item.blockId,
+                                      from_section_id: item.sectionId,
+                                      to_section_id: item.sectionId,
+                                      position: Math.max(0, j - 1),
+                                    },
+                                    item.blockId,
+                                  )
+                                }
+                                title="Move up"
+                                className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 cursor-pointer"
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busyBlockId === item.blockId || j === day.items.length - 1}
+                                onClick={() =>
+                                  runTripMutation(
+                                    "move_place",
+                                    {
+                                      trip_key: selectedTripId,
+                                      place_id: item.blockId,
+                                      from_section_id: item.sectionId,
+                                      to_section_id: item.sectionId,
+                                      position: j + 1,
+                                    },
+                                    item.blockId,
+                                  )
+                                }
+                                title="Move down"
+                                className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 cursor-pointer"
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </button>
+                              <select
+                                defaultValue=""
+                                disabled={busyBlockId === item.blockId}
+                                onChange={(e) => {
+                                  const targetSec = Number(e.target.value);
+                                  if (!targetSec) return;
+                                  runTripMutation(
+                                    "move_place",
+                                    {
+                                      trip_key: selectedTripId,
+                                      place_id: item.blockId,
+                                      from_section_id: item.sectionId,
+                                      to_section_id: targetSec,
+                                      position: 0,
+                                    },
+                                    item.blockId,
+                                  );
+                                }}
+                                className="rounded bg-slate-800 border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-200 max-w-28"
+                              >
+                                <option value="">Move to...</option>
+                                {days
+                                  .filter((d) => d.id !== item.sectionId)
+                                  .map((d) => (
+                                    <option key={d.id} value={d.id}>
+                                      {d.title}
+                                    </option>
+                                  ))}
+                              </select>
+                            </>
+                          )}
+                          {confirmDeleteId === item.blockId ? (
+                            <button
+                              type="button"
+                              disabled={busyBlockId === item.blockId}
+                              onClick={() =>
+                                runTripMutation(
+                                  "delete_itinerary_block",
+                                  {
+                                    trip_key: selectedTripId,
+                                    block_id: item.blockId,
+                                    section_id: item.sectionId,
+                                    confirm: true,
+                                  },
+                                  item.blockId,
+                                )
+                              }
+                              className="px-1.5 py-0.5 rounded bg-rose-700 hover:bg-rose-600 text-[10px] font-semibold text-white cursor-pointer"
+                            >
+                              Confirm Remove
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busyBlockId === item.blockId}
+                              onClick={() => setConfirmDeleteId(item.blockId!)}
+                              title="Remove item"
+                              className="p-1 rounded bg-slate-800 hover:bg-rose-900/70 text-slate-400 hover:text-rose-200 cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       )}
                     </li>
                   ))}
