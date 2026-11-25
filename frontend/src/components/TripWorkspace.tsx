@@ -1,6 +1,8 @@
 "use client";
 
-import { Calendar, Compass, ExternalLink, Hotel, MapPin, RefreshCw } from "lucide-react";
+import { Calendar, Compass, ExternalLink, Hotel, List, Map as MapIcon, MapPin, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { InteractiveMap, MapMarker } from "./InteractiveMap";
 
 export interface TripSummary {
   id?: string;
@@ -117,6 +119,62 @@ function extractDays(detail: Record<string, unknown> | null): Array<{ title: str
   });
 }
 
+function extractMarkers(detail: Record<string, unknown> | null): MapMarker[] {
+  if (!detail) return [];
+  const outer = detail.itinerary as Record<string, unknown> | undefined;
+  const inner = (outer?.itinerary as Record<string, unknown> | undefined) || outer;
+  const sections =
+    (inner?.sections as Array<Record<string, unknown>>) ||
+    (inner?.days as Array<Record<string, unknown>>) ||
+    ((detail.trip as Record<string, unknown>)?.sections as Array<Record<string, unknown>>) ||
+    [];
+
+  if (!Array.isArray(sections)) return [];
+  const markers: MapMarker[] = [];
+
+  for (const sec of sections) {
+    const dayTitle =
+      asString(sec.displayHeading) || asString(sec.heading) || asString(sec.title) || asString(sec.date);
+    const isHotelSec = /hotel|lodging|stay/i.test(dayTitle);
+    const blocks = (sec.blocks as Array<Record<string, unknown>>) || (sec.places as Array<Record<string, unknown>>) || [];
+    if (!Array.isArray(blocks)) continue;
+
+    for (const b of blocks) {
+      const pushPlace = (place: Record<string, unknown> | undefined, fallbackName: string, cat: MapMarker["category"]) => {
+        if (!place) return;
+        const loc = (place.geometry as Record<string, unknown> | undefined)?.location as
+          | Record<string, unknown>
+          | undefined;
+        const lat = typeof loc?.lat === "number" ? loc.lat : undefined;
+        const lng = typeof loc?.lng === "number" ? loc.lng : undefined;
+        if (lat !== undefined && lng !== undefined) {
+          const name = asString(place.name) || fallbackName;
+          markers.push({
+            name: name || "Stop",
+            lat,
+            lng,
+            category: cat,
+            day: dayTitle || undefined,
+            url: buildPlaceUrl(place, name),
+          });
+        }
+      };
+
+      const place = b.place as Record<string, unknown> | undefined;
+      if (place) {
+        pushPlace(place, asString(b.name) || asString(b.title), isHotelSec ? "hotel" : "place");
+      }
+
+      const depart = b.depart as Record<string, unknown> | undefined;
+      const arrive = b.arrive as Record<string, unknown> | undefined;
+      if (depart?.place) pushPlace(depart.place as Record<string, unknown>, "Departure", "transit");
+      if (arrive?.place) pushPlace(arrive.place as Record<string, unknown>, "Arrival", "transit");
+    }
+  }
+
+  return markers;
+}
+
 export function TripWorkspace({
   trips,
   selectedTripId,
@@ -127,7 +185,9 @@ export function TripWorkspace({
   onRefresh,
   onQuickPrompt,
 }: TripWorkspaceProps) {
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const days = extractDays(tripDetail);
+  const markers = extractMarkers(tripDetail);
   const selectedTrip = trips.find((t) => (t.id || t.tripId) === selectedTripId);
 
   return (
@@ -165,31 +225,56 @@ export function TripWorkspace({
         </select>
 
         {selectedTrip && (
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                onQuickPrompt(`Run an AI Council cross-check on trip "${selectedTrip.title || selectedTripId}" (ID: ${selectedTripId}).`)
-              }
-              className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-medium bg-violet-950/70 hover:bg-violet-900/70 text-violet-200 border border-violet-800/60 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
-            >
-              <Compass className="w-3.5 h-3.5" /> Council Check
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                onQuickPrompt(
-                  `Search Booking.com and Agoda hotels for trip "${selectedTrip.title || selectedTripId}"${
-                    selectedTrip.startDate && selectedTrip.endDate
-                      ? ` from ${selectedTrip.startDate} to ${selectedTrip.endDate}`
-                      : ""
-                  }.`,
-                )
-              }
-              className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-medium bg-sky-950/70 hover:bg-sky-900/70 text-sky-200 border border-sky-800/60 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
-            >
-              <Hotel className="w-3.5 h-3.5" /> Find Hotels
-            </button>
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  onQuickPrompt(
+                    `Run an AI Council cross-check on trip "${selectedTrip.title || selectedTripId}" (ID: ${selectedTripId}).`,
+                  )
+                }
+                className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-medium bg-violet-950/70 hover:bg-violet-900/70 text-violet-200 border border-violet-800/60 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+              >
+                <Compass className="w-3.5 h-3.5" /> Council Check
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onQuickPrompt(
+                    `Search Booking.com and Agoda hotels for trip "${selectedTrip.title || selectedTripId}"${
+                      selectedTrip.startDate && selectedTrip.endDate
+                        ? ` from ${selectedTrip.startDate} to ${selectedTrip.endDate}`
+                        : ""
+                    }.`,
+                  )
+                }
+                className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-medium bg-sky-950/70 hover:bg-sky-900/70 text-sky-200 border border-sky-800/60 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+              >
+                <Hotel className="w-3.5 h-3.5" /> Find Hotels
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 rounded-xl bg-slate-900 p-1 border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`inline-flex items-center justify-center gap-1.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                  viewMode === "list" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <List className="w-3.5 h-3.5" /> Itinerary
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("map")}
+                className={`inline-flex items-center justify-center gap-1.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                  viewMode === "map" ? "bg-slate-800 text-slate-100" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <MapIcon className="w-3.5 h-3.5" /> Map ({markers.length})
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -199,6 +284,13 @@ export function TripWorkspace({
           <p className="text-xs text-slate-500">Select a trip above to inspect its itinerary and run one-click checks.</p>
         ) : loadingDetail ? (
           <p className="text-xs text-slate-400">Loading itinerary from Wanderlog MCP...</p>
+        ) : viewMode === "map" ? (
+          <InteractiveMap
+            title={selectedTrip?.title || "Trip Map"}
+            markers={markers}
+            drawRoute={true}
+            heightClass="h-80"
+          />
         ) : days.length === 0 ? (
           <p className="text-xs text-slate-500">No itinerary days found yet for this trip.</p>
         ) : (

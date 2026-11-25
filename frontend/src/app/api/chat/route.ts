@@ -36,6 +36,7 @@ Core Rules:
    - Use "ai_council_ask", "ai_council_crosscheck", and "ai_council_debate" to collaborate with Claude & DeepSeek on itinerary quality, transit, dining, and opening hours.
    - Use "list_trips", "get_trip", "get_itinerary", and "get_trip_places" to inspect existing Wanderlog trips.
    - Whenever presenting a booked or planned hotel from a Wanderlog trip, ALWAYS call "display_hotel_card" so the UI renders a rich Hotel Card instead of a raw table.
+   - Whenever the user asks for a map, route, or geographic overview of a trip or day, ALWAYS call "display_trip_map" with the coordinates from "get_itinerary" / "get_trip_places" so the UI renders an interactive Leaflet map (NEVER draw ASCII maps).
 2. Approval-Gated Mutations:
    - Never delete trips.
    - Whenever you want to modify a Wanderlog trip (add_place, add_lodging, add_flight, update_place_visit_time, etc.), call the mutation tool directly — the UI will automatically pause and present an Approve / Cancel card to the user before executing it.
@@ -87,6 +88,27 @@ export async function POST(req: Request) {
       execute: async (args) => args,
     });
 
+    const displayTripMapTool = tool({
+      description:
+        "Render an interactive Leaflet map with pins and optional route polyline in the chat UI.",
+      parameters: z.object({
+        title: z.string().optional(),
+        drawRoute: z.boolean().optional(),
+        markers: z.array(
+          z.object({
+            name: z.string(),
+            lat: z.number(),
+            lng: z.number(),
+            category: z.enum(["place", "hotel", "transit", "flight"]).optional(),
+            day: z.string().optional(),
+            notes: z.string().optional(),
+            url: z.string().optional(),
+          }),
+        ),
+      }),
+      execute: async (args) => args,
+    });
+
     const result = streamText({
       model: anthropic(process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514"),
       system: SYSTEM_PROMPT + tripContextNote,
@@ -95,6 +117,7 @@ export async function POST(req: Request) {
         ...agyTools,
         ...gatedWanderlogTools,
         display_hotel_card: displayHotelCardTool,
+        display_trip_map: displayTripMapTool,
       },
       maxSteps: 6,
       onError: ({ error }) => {

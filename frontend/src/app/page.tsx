@@ -8,6 +8,7 @@ import { BookedHotelCard, BookedHotelData } from "@/components/BookedHotelCard";
 import { CouncilCard } from "@/components/CouncilCard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { HotelComparisonCard } from "@/components/HotelComparisonCard";
+import { InteractiveMap, MapMarker } from "@/components/InteractiveMap";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import { TripSummary, TripWorkspace } from "@/components/TripWorkspace";
 
@@ -213,6 +214,23 @@ export default function TravelPlannerPage() {
                 {m.toolInvocations?.map((inv) => {
                   if (inv.state === "result" && inv.toolName === "display_hotel_card") {
                     return <BookedHotelCard key={inv.toolCallId} data={(inv.result || {}) as BookedHotelData} />;
+                  }
+
+                  if (inv.state === "result" && inv.toolName === "display_trip_map") {
+                    const mapData = (inv.result || {}) as {
+                      title?: string;
+                      drawRoute?: boolean;
+                      markers?: MapMarker[];
+                    };
+                    return (
+                      <InteractiveMap
+                        key={inv.toolCallId}
+                        title={mapData.title}
+                        drawRoute={mapData.drawRoute ?? true}
+                        markers={mapData.markers || []}
+                        heightClass="h-80"
+                      />
+                    );
                   }
 
                   if (MUTATION_TOOLS.has(inv.toolName)) {
