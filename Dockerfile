@@ -78,8 +78,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Environment variables
 ENV PATH="/usr/local/bin:/root/.local/bin:${PATH}"
 
-# Expose Web UI (Chainlit) and Travel App (Next.js) ports
-EXPOSE 8000 3000
+# Expose Web UI (Next.js Travel Planner) port
+EXPOSE 8000
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["daemon"]

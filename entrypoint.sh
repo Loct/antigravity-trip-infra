@@ -283,68 +283,34 @@ if [ "$ENABLE_REMOTE_CONTROL" = "true" ]; then
   fi
 fi
 
-# 7. Start Web Frontend (Chainlit)
+# 7. Start Web Frontend (Next.js Travel Planner)
 ENABLE_WEB_UI="${ENABLE_WEB_UI:-true}"
 WEB_PORT="${WEB_PORT:-8000}"
 
-if [ "$ENABLE_WEB_UI" = "true" ]; then
-  echo "[-] Starting Web UI (Chainlit) daemon on port ${WEB_PORT}..."
+if [ "$ENABLE_WEB_UI" = "true" ] && [ -f "/workspace/frontend/package.json" ] && command -v npm >/dev/null 2>&1; then
+  echo "[-] Starting Travel Planner Frontend (Next.js) on port ${WEB_PORT}..."
   mkdir -p /workspace/data /root/.gemini/antigravity-cli
 
-  # Ensure CHAINLIT_AUTH_SECRET is persisted and exported
-  AUTH_SECRET_FILE="/root/.gemini/antigravity-cli/.chainlit_secret"
-  if [ -z "${CHAINLIT_AUTH_SECRET:-}" ]; then
-    if [ ! -f "$AUTH_SECRET_FILE" ]; then
-      openssl rand -hex 32 >"$AUTH_SECRET_FILE"
-      chmod 600 "$AUTH_SECRET_FILE"
-    fi
-    CHAINLIT_AUTH_SECRET="$(cat "$AUTH_SECRET_FILE")"
-    export CHAINLIT_AUTH_SECRET
-  fi
-
-  # Ensure .chainlit/config.toml has required [meta] section
-  if [ -f "/workspace/.chainlit/config.toml" ] && ! grep -q "\[meta\]" "/workspace/.chainlit/config.toml"; then
-    sed -i '1i [meta]\ngenerated_by = "2.12.0"\n' /workspace/.chainlit/config.toml
-  fi
-
-  cd /workspace
-  uv run chainlit run scripts/web_app.py --host 0.0.0.0 --port "${WEB_PORT}" --headless >/root/.gemini/antigravity-cli/web-ui.log 2>&1 &
-  WEB_PID=$!
-  sleep 3
-
-  if kill -0 "$WEB_PID" 2>/dev/null; then
-    echo "[-] Web UI daemon is RUNNING (PID: $WEB_PID) on port ${WEB_PORT}."
-    echo "    Open http://localhost:${WEB_PORT} in your browser or on your phone."
-  else
-    echo "[!] Web UI daemon failed to start. Check logs:"
-    cat /root/.gemini/antigravity-cli/web-ui.log 2>/dev/null || true
-  fi
-fi
-
-# 7b. Start Travel Planner Frontend (Next.js)
-ENABLE_TRAVEL_APP="${ENABLE_TRAVEL_APP:-true}"
-FRONTEND_PORT="${FRONTEND_PORT:-3000}"
-
-if [ "$ENABLE_TRAVEL_APP" = "true" ] && [ -f "/workspace/frontend/package.json" ] && command -v npm >/dev/null 2>&1; then
-  echo "[-] Starting Travel Planner Frontend (Next.js) on port ${FRONTEND_PORT}..."
   cd /workspace/frontend
   if [ ! -d "node_modules" ]; then
     echo "[-] Installing frontend dependencies..."
-    npm install --no-audit --no-fund >/root/.gemini/antigravity-cli/travel-app-build.log 2>&1 || true
+    npm install --no-audit --no-fund >/root/.gemini/antigravity-cli/web-ui-build.log 2>&1 || true
   fi
   if [ ! -d ".next" ]; then
     echo "[-] Building Next.js Travel Planner frontend..."
-    npm run build >>/root/.gemini/antigravity-cli/travel-app-build.log 2>&1 || true
+    npm run build >>/root/.gemini/antigravity-cli/web-ui-build.log 2>&1 || true
   fi
-  npx next start -H 0.0.0.0 -p "${FRONTEND_PORT}" >/root/.gemini/antigravity-cli/travel-app.log 2>&1 &
-  TRAVEL_PID=$!
+
+  npx next start -H 0.0.0.0 -p "${WEB_PORT}" >/root/.gemini/antigravity-cli/web-ui.log 2>&1 &
+  WEB_PID=$!
   sleep 2
-  if kill -0 "$TRAVEL_PID" 2>/dev/null; then
-    echo "[-] Travel Planner Frontend is RUNNING (PID: $TRAVEL_PID) on port ${FRONTEND_PORT}."
-    echo "    Open http://localhost:${FRONTEND_PORT} in your browser."
+
+  if kill -0 "$WEB_PID" 2>/dev/null; then
+    echo "[-] Travel Planner Frontend is RUNNING (PID: $WEB_PID) on port ${WEB_PORT}."
+    echo "    Open http://localhost:${WEB_PORT} in your browser or on your phone."
   else
     echo "[!] Travel Planner Frontend failed to start. Check logs:"
-    cat /root/.gemini/antigravity-cli/travel-app.log 2>/dev/null || true
+    cat /root/.gemini/antigravity-cli/web-ui.log 2>/dev/null || true
   fi
   cd /workspace
 fi
@@ -354,7 +320,6 @@ if [ "$1" = "daemon" ] || [ -z "$1" ]; then
   echo "[-] Container ready. Running in daemon mode."
   echo "    Useful commands:"
   echo "      - Web Frontend:     http://localhost:${WEB_PORT:-8000}"
-  echo "      - Travel App:       http://localhost:${FRONTEND_PORT:-3000}"
   echo "      - Interactive CLI:  docker compose exec antigravity-wanderlog agy"
   echo "      - Wanderlog status: docker compose exec antigravity-wanderlog wanderlog status"
   echo "      - Wanderlog trips:  docker compose exec antigravity-wanderlog wanderlog trips list"
