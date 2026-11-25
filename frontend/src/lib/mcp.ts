@@ -64,6 +64,32 @@ export async function createAntigravityToolsMCPClient() {
   return createMCPClient({ transport });
 }
 
+const BLOATED_KEYS = new Set([
+  "address_components",
+  "photos",
+  "reviews",
+  "html_attributions",
+  "opening_hours",
+  "current_opening_hours",
+  "editorial_summary",
+  "utc_offset",
+  "icon_background_color",
+  "icon_mask_base_uri",
+]);
+
+function compactPayload(value: unknown, depth = 0): unknown {
+  if (depth > 8 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((item) => compactPayload(item, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (BLOATED_KEYS.has(k)) continue;
+    out[k] = compactPayload(v, depth + 1);
+  }
+  return out;
+}
+
+const COMPACT_TOOLS = new Set(["get_itinerary", "get_trip_places", "get_trip_plan"]);
+
 export function normalizeMCPTools(
   rawTools: Record<string, unknown>,
   options: {
@@ -93,7 +119,8 @@ export function normalizeMCPTools(
       const origExecute = def.execute;
       baseTool.execute = async (args: Record<string, unknown>, ctx: any) => {
         const res = await origExecute(args, ctx);
-        return extractMCPTextResult(res);
+        const extracted = extractMCPTextResult(res);
+        return COMPACT_TOOLS.has(name) ? compactPayload(extracted) : extracted;
       };
     }
 

@@ -21,6 +21,7 @@ const anthropic = createAnthropic({
 import {
   BLOCKED_WANDERLOG_TOOLS,
   MUTATION_WANDERLOG_TOOLS,
+  callMCPTool,
   createAntigravityToolsMCPClient,
   createWanderlogMCPClient,
   normalizeMCPTools,
@@ -36,7 +37,7 @@ Core Rules:
    - Use "ai_council_ask", "ai_council_crosscheck", and "ai_council_debate" to collaborate with Claude & DeepSeek on itinerary quality, transit, dining, and opening hours.
    - Use "list_trips", "get_trip", "get_itinerary", and "get_trip_places" to inspect existing Wanderlog trips.
    - Whenever presenting a booked or planned hotel from a Wanderlog trip, ALWAYS call "display_hotel_card" so the UI renders a rich Hotel Card instead of a raw table.
-   - Whenever the user asks for a map, route, or geographic overview of a trip or day, ALWAYS call "display_trip_map" with the coordinates from "get_itinerary" / "get_trip_places" so the UI renders an interactive Leaflet map (NEVER draw ASCII maps).
+   - Whenever the user asks for a map, route, or geographic overview of a trip or day, ALWAYS call "display_trip_map". For a full Wanderlog trip map, simply pass "tripKey" (e.g. "oocqlrcxztnlvaic") and the server will plot all stops automatically; only pass custom "markers" if plotting a custom subset. NEVER draw ASCII maps.
    - Whenever recommending restaurants, sights, cafes, or activities, ALWAYS call "display_place_recommendations" so the UI renders interactive recommendation cards with one-click "Add to Trip" buttons.
 2. Approval-Gated Mutations:
    - Never delete trips.
@@ -91,23 +92,67 @@ export async function POST(req: Request) {
 
     const displayTripMapTool = tool({
       description:
-        "Render an interactive Leaflet map with pins and optional route polyline in the chat UI.",
+        "Render an interactive Leaflet map with pins and optional route polyline in the chat UI. Pass tripKey to automatically plot all stops from a Wanderlog trip, or pass custom markers.",
       parameters: z.object({
         title: z.string().optional(),
+        tripKey: z.string().optional(),
         drawRoute: z.boolean().optional(),
-        markers: z.array(
-          z.object({
-            name: z.string(),
-            lat: z.number(),
-            lng: z.number(),
-            category: z.enum(["place", "hotel", "transit", "flight"]).optional(),
-            day: z.string().optional(),
-            notes: z.string().optional(),
-            url: z.string().optional(),
-          }),
-        ),
+        markers: z
+          .array(
+            z.object({
+              name: z.string(),
+              lat: z.number(),
+              lng: z.number(),
+              category: z.enum(["place", "hotel", "transit", "flight"]).optional(),
+              day: z.string().optional(),
+              notes: z.string().optional(),
+              url: z.string().optional(),
+            }),
+          )
+          .optional(),
       }),
-      execute: async (args) => args,
+      execute: async (args) => {
+        if (args.markers && args.markers.length > 0) {
+          return args;
+        }
+        if (args.tripKey) {
+          const raw = (await callMCPTool(rawWanderlogTools, "get_itinerary", {
+            trip_key: args.tripKey,
+          })) as Record<string, unknown> | null;
+          const inner = (raw?.itinerary as Record<string, unknown> | undefined) || raw;
+          const sections = (inner?.sections as Array<Record<string, unknown>>) || [];
+          const markers: Array<Record<string, unknown>> = [];
+          for (const sec of sections) {
+            const day =
+              (sec.displayHeading as string) || (sec.heading as string) || (sec.date as string) || undefined;
+            const isHotel = Boolean(day && /hotel|lodging|stay/i.test(day));
+            const blocks = (sec.blocks as Array<Record<string, unknown>>) || [];
+            for (const b of blocks) {
+              const pushLoc = (place: Record<string, unknown> | undefined, cat: string) => {
+                const loc = (place?.geometry as Record<string, unknown> | undefined)?.location as
+                  | Record<string, unknown>
+                  | undefined;
+                if (typeof loc?.lat === "number" && typeof loc?.lng === "number") {
+                  markers.push({
+                    name: (place?.name as string) || (b.name as string) || "Stop",
+                    lat: loc.lat,
+                    lng: loc.lng,
+                    category: cat,
+                    day,
+                  });
+                }
+              };
+              if (b.place) pushLoc(b.place as Record<string, unknown>, isHotel ? "hotel" : "place");
+              const depart = b.depart as Record<string, unknown> | undefined;
+              const arrive = b.arrive as Record<string, unknown> | undefined;
+              if (depart?.place) pushLoc(depart.place as Record<string, unknown>, "transit");
+              if (arrive?.place) pushLoc(arrive.place as Record<string, unknown>, "transit");
+            }
+          }
+          return { ...args, markers };
+        }
+        return { ...args, markers: [] };
+      },
     });
 
     const displayPlaceRecommendationsTool = tool({
@@ -145,6 +190,7 @@ export async function POST(req: Request) {
         display_place_recommendations: displayPlaceRecommendationsTool,
       },
       maxSteps: 6,
+      maxTokens: 8192,
       onError: ({ error }) => {
         console.error("[/api/chat] streamText error:", error);
       },
